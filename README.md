@@ -1,6 +1,6 @@
 # tado-bridge
 
-Small, read-only Go CLI for tado° V3/V3+ and X. This repository implements **M1 only** from the [design](docs/design/tado-bridge-design.md): OAuth device login and home/zone discovery. No server, polling, cache, metrics or thermostat controls yet.
+Small, read-only Go CLI for tado° V3/V3+ and X. This repository implements M1 OAuth and home/zone discovery, plus an explicitly requested one-shot measurement command ahead of the M2 service. No server, polling, cache, metrics or thermostat controls yet.
 
 ## Prerequisites and local use
 
@@ -14,6 +14,7 @@ export TADO_CREDENTIALS_FILE="$HOME/.config/tado-bridge/credentials.json"
 ./bin/tado-bridge auth login
 ./bin/tado-bridge auth status
 ./bin/tado-bridge discover
+./bin/tado-bridge read
 ```
 
 Login prints a complete verification URL and user code to stderr. Open the entire URL (including its query parameters), enter the code if prompted and authorize with tado°. The URL includes the client ID and user code; opening the bare `/oauth2/device` URL can produce a `missing_client_id` error. The CLI waits at the upstream polling interval, handles pending/slow-down responses and stops at expiry or Ctrl-C. It never asks for your account password. Do not share the authorization URL, code or tokens.
@@ -27,9 +28,23 @@ Login prints a complete verification URL and user code to stderr. Open the entir
 }
 ```
 
-Discovery automatically checks each home's generation: V3/V3+ uses the zones endpoint; X uses the rooms-and-devices endpoint. X rooms are exposed as `zones` with the same ID/name fields, including in accounts with mixed home generations. Only IDs and names are copied from upstream; email, addresses, account metadata, device serials and credentials are excluded. Names and stable IDs are still private: take care when saving or sharing this output. Measurements and timestamps belong to the subsequent collection milestone.
+Discovery automatically checks each home's generation: V3/V3+ uses the zones endpoint; X uses the rooms-and-devices endpoint. X rooms are exposed as `zones` with the same ID/name fields, including in accounts with mixed home generations. Only IDs and names are copied by `discover`; email, addresses, account metadata, device serials and credentials are excluded. Names and stable IDs are still private: take care when saving or sharing this output.
 
 Request counts are printed separately to stderr, including on failure. A discovery with H homes makes `1 + 2*H` REST requests: one home list, then generation and zone/room discovery per home. Expired credentials add one OAuth refresh. There are no automatic API retries, including on 401 or 429. Correct an authorization problem with `auth login`; wait for quota recovery after 429. M2 will handle budgets, Retry-After and scheduled retries.
+
+## One-shot measurements
+
+`read` makes one read-only collection and prints a normalized snapshot to stdout:
+
+```sh
+./bin/tado-bridge read
+```
+
+Each zone includes `temperature_c`, `target_temperature_c`, `humidity_percent`, `heating_active` and `temperature_measured_at`. Unknown fields are explicit JSON `null`; zero and false remain valid readings. Temperature is Celsius and humidity is percent. A room configured as `OFF` has no active target, so `target_temperature_c` is `null` even if upstream retains an old setpoint. Heating activity reflects an explicit upstream heating-power percentage above zero, not a comparison of target and measured temperatures or confirmation that a boiler is firing.
+
+`collected_at` is the UTC RFC3339 completion time of the entire collection. `temperature_measured_at` preserves a sensor timestamp only when upstream supplies it; it is `null` otherwise. Collection time does not prove sensor freshness, including for disconnected devices; this command does not infer freshness from a successful API response.
+
+An X home takes three REST requests in total (`/me`, generation, all room states), regardless of room count. A V3/V3+ home with Z zones takes `3 + Z` REST requests (home list, generation, zone list, then one state request per zone). Mixed accounts cost `1 + 2*H + number of V3 zones`. An expired access token adds one OAuth refresh. Any failed request aborts the command without printing a partial snapshot. Nothing is cached and no background polling starts. Repeated executions consume upstream quota.
 
 ## Credentials
 
@@ -55,4 +70,4 @@ Tests use synthetic fixtures and local HTTP servers; no real credentials or upst
 
 GitHub Actions runs formatting checks, race tests, vet and module verification on pushes to `main` and pull requests, using the latest stable Go release. It also cross-compiles Linux and macOS binaries for amd64/arm64. A separate Zizmor workflow audits the Actions configuration. Actions are pinned by commit SHA; Dependabot checks Go modules and Actions weekly, without an update cooldown.
 
-See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. Stop at M1: test login/discovery locally before committing the milestone or starting M2.
+See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. M1 has been merged; the one-shot readings extend the CLI while the periodic collector and local HTTP API remain pending for M2.

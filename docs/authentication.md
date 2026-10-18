@@ -6,6 +6,7 @@ Sources checked on 2026-10-18 before implementing the client:
 - [tado° REST usage limits](https://help.tado.com/en/articles/12165739-limitation-for-rest-api-usage): official quota explanation and `ratelimit` header format.
 - [PyTado V3 client source](https://github.com/wmalgadey/PyTado/blob/master/PyTado/interface/api/my_tado.py) and [HTTP routing source](https://github.com/wmalgadey/PyTado/blob/master/PyTado/http.py): implementation evidence for the zones route and API base. This is a third-party client's primary source, not an official API contract.
 - [PyTado X client source](https://github.com/wmalgadey/PyTado/blob/master/PyTado/interface/api/hops_tado.py) and [X response models](https://github.com/wmalgadey/PyTado/blob/master/PyTado/models/line_x/device.py): evidence for the X discovery route and `rooms`, `roomId`, `roomName` fields. These are third-party implementation sources; the route/schema were also checked with a live account, without persisting its responses.
+- [X room-state models](https://github.com/wmalgadey/PyTado/blob/master/PyTado/models/line_x/room.py) and [V3 zone-state models](https://github.com/wmalgadey/PyTado/blob/master/PyTado/models/pre_line_x/zone.py): measurement fields for the one-shot `read` extension. X temperatures use `value`; V3 uses `celsius`. X heating power is top-level; V3 nests it in `activityDataPoints`.
 
 ## Implemented requests
 
@@ -17,6 +18,8 @@ Sources checked on 2026-10-18 before implementing the client:
 | GET | `https://my.tado.com/api/v2/homes/{homeID}` | Detect home generation (`LINE_X` selects X) |
 | GET | `https://my.tado.com/api/v2/homes/{homeID}/zones` | Discover V3/V3+ zones |
 | GET | `https://hops.tado.com/homes/{homeID}/roomsAndDevices` | Discover X rooms |
+| GET | `https://hops.tado.com/homes/{homeID}/rooms` | Read all X room states in one request |
+| GET | `https://my.tado.com/api/v2/homes/{homeID}/zones/{zoneID}/state` | Read one V3/V3+ zone state |
 
 The public client ID is `1bb50063-6b0c-4d11-bd99-387f4a91cc46`, with `offline_access` to request refresh credentials. No client secret or password grant is used. OAuth parameters are form-encoded in the POST body to avoid placing credentials in URLs. The official examples use query parameters; the operator has successfully completed login with the form-body implementation.
 
@@ -47,6 +50,10 @@ Live investigation confirmed the operator's home reports `LINE_X`: the V3 zones 
 
 The rebuilt CLI was then verified end to end: `discover` returned one home and eight zones, reporting `api=3 oauth=0`. Verification displayed counts only and did not save or log the account's home/room payloads.
 
-V3/V3+ live discovery and refresh-token rotation after expiry still need verification. Fixtures are synthetic and are not presented as captured production responses. Do not paste raw upstream bodies, user codes or credential files into issues or commits. Inspect quota headers privately if needed; the CLI does not currently expose them.
+The one-shot `read` extension was verified on the live X home: eight measured temperatures, eight humidity readings and eight explicit heating states, using three REST calls and one OAuth refresh. All eight rooms reported `setting.power=OFF`, so normalized targets were `null`. Refresh and persistence completed successfully; no credentials or private readings were logged or saved as fixtures. Counts were displayed only for this manual acceptance check.
 
-No measurement fields or heating-state inference are implemented in M1. HTTP service, snapshots, polling, retry/budget policy and containers remain later milestones. CI was added separately at the operator's request.
+The new command costs `1 + 2 * number of homes + number of V3 zones` REST calls; X states need no additional per-room requests. Unknown sensor fields stay null. The completion timestamp is not a sensor timestamp; upstream temperature timestamps are preserved in UTC when available. `heating_active` uses only valid explicit heating-power percentages, never target-versus-measured inference. OFF settings suppress the inactive target temperature.
+
+V3/V3+ live discovery and measurements still need verification. Fixtures are synthetic and are not presented as captured production responses. Do not paste raw upstream bodies, user codes or credential files into issues or commits. Inspect quota headers privately if needed; the CLI does not currently expose them.
+
+M1 discovery is unchanged. The separately requested one-shot measurement extension adds normalized CLI snapshots without a service or poller. HTTP service, cached snapshots, polling, retry/budget policy and containers remain later milestones. CI was added separately at the operator's request.

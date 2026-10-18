@@ -207,41 +207,61 @@ func (c *Client) Refresh(ctx context.Context, token credentials.Token) (credenti
 // email, addresses, device serials and all other upstream metadata.
 func (c *Client) Discover(ctx context.Context, token credentials.Token) (domain.Discovery, error) {
 	result := domain.Discovery{Provider: "tado", Homes: []domain.Home{}}
+	homes, err := c.homes(ctx, token.AccessToken)
+	if err != nil {
+		return result, err
+	}
+	for _, home := range homes {
+		zones, err := c.discoverZones(ctx, token.AccessToken, home.ID)
+		if err != nil {
+			return result, err
+		}
+		result.Homes = append(result.Homes, domain.Home{ID: home.ID, Name: home.Name, Zones: zones})
+	}
+	return result, nil
+}
+
+func (c *Client) homes(ctx context.Context, bearer string) ([]domain.Home, error) {
 	var me struct {
 		Homes []struct {
 			ID   json.Number `json:"id"`
 			Name string      `json:"name"`
 		} `json:"homes"`
 	}
-	if err := c.request(ctx, http.MethodGet, c.apiURL+"/me", token.AccessToken, nil, &me); err != nil {
-		return result, err
+	if err := c.request(ctx, http.MethodGet, c.apiURL+"/me", bearer, nil, &me); err != nil {
+		return nil, err
 	}
 	if me.Homes == nil {
-		return result, errors.New("upstream response has no homes list")
+		return nil, errors.New("upstream response has no homes list")
 	}
+	homes := []domain.Home{}
 	for _, home := range me.Homes {
 		if home.ID == "" {
-			return result, errors.New("upstream home has no ID")
+			return nil, errors.New("upstream home has no ID")
 		}
-		zones, err := c.discoverZones(ctx, token.AccessToken, string(home.ID))
-		if err != nil {
-			return result, err
-		}
-		result.Homes = append(result.Homes, domain.Home{ID: string(home.ID), Name: home.Name, Zones: zones})
+		homes = append(homes, domain.Home{ID: string(home.ID), Name: home.Name})
 	}
-	return result, nil
+	return homes, nil
 }
 
-func (c *Client) discoverZones(ctx context.Context, bearer, homeID string) ([]domain.Zone, error) {
-	homePath := "/homes/" + url.PathEscape(homeID)
+func (c *Client) homeGeneration(ctx context.Context, bearer, homeID string) (string, error) {
 	var home struct {
 		Generation string `json:"generation"`
 	}
-	if err := c.request(ctx, http.MethodGet, c.apiURL+homePath, bearer, nil, &home); err != nil {
+	if err := c.request(ctx, http.MethodGet, c.apiURL+"/homes/"+url.PathEscape(homeID), bearer, nil, &home); err != nil {
+		return "", err
+	}
+	return home.Generation, nil
+}
+
+func (c *Client) discoverZones(ctx context.Context, bearer, homeID string) ([]domain.Zone, error) {
+	generation, err := c.homeGeneration(ctx, bearer, homeID)
+	if err != nil {
 		return nil, err
 	}
+	homePath := "/homes/" + url.PathEscape(homeID)
 	zones := []domain.Zone{}
-	if home.Generation == "LINE_X" {
+	if generation == "LINE_X" {
 		var response struct {
 			Rooms []struct {
 				ID   json.Number `json:"roomId"`
@@ -262,16 +282,21 @@ func (c *Client) discoverZones(ctx context.Context, bearer, homeID string) ([]do
 		}
 		return zones, nil
 	}
+	return c.v3Zones(ctx, bearer, homeID)
+}
+
+func (c *Client) v3Zones(ctx context.Context, bearer, homeID string) ([]domain.Zone, error) {
 	var response []struct {
 		ID   json.Number `json:"id"`
 		Name string      `json:"name"`
 	}
-	if err := c.request(ctx, http.MethodGet, c.apiURL+homePath+"/zones", bearer, nil, &response); err != nil {
+	if err := c.request(ctx, http.MethodGet, c.apiURL+"/homes/"+url.PathEscape(homeID)+"/zones", bearer, nil, &response); err != nil {
 		return nil, err
 	}
 	if response == nil {
 		return nil, errors.New("upstream response has no zones list")
 	}
+	zones := []domain.Zone{}
 	for _, zone := range response {
 		if zone.ID == "" {
 			return nil, errors.New("upstream zone has no ID")
