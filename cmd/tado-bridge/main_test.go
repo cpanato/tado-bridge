@@ -35,7 +35,7 @@ func TestLocalCommands(t *testing.T) {
 }
 
 func TestUsage(t *testing.T) {
-	for _, args := range [][]string{nil, {"serve"}, {"auth", "login", "extra"}, {"discover"}} {
+	for _, args := range [][]string{nil, {"serve"}, {"auth", "login", "extra"}, {"discover"}, {"read"}, {"read", "extra"}} {
 		if err := run(context.Background(), args, "", &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 			t.Fatalf("expected error for %v", args)
 		}

@@ -26,18 +26,18 @@ func main() {
 
 func run(ctx context.Context, args []string, path string, stdout, stderr io.Writer) error {
 	command := ""
-	if len(args) == 1 && args[0] == "discover" {
-		command = "discover"
+	if len(args) == 1 && (args[0] == "discover" || args[0] == "read") {
+		command = args[0]
 	}
 	if len(args) == 2 && args[0] == "auth" && (args[1] == "login" || args[1] == "status" || args[1] == "logout") {
 		command = args[1]
 	}
 	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
-		_, err := fmt.Fprintln(stdout, "Usage: tado-bridge auth {login|status|logout} | discover\nSet TADO_CREDENTIALS_FILE to a private file path. Discovery JSON goes to stdout; login instructions and request counts go to stderr.")
+		_, err := fmt.Fprintln(stdout, "Usage: tado-bridge auth {login|status|logout} | discover | read\nSet TADO_CREDENTIALS_FILE to a private file path. Discovery or one-shot measurement JSON goes to stdout; login instructions and request counts go to stderr.")
 		return err
 	}
 	if command == "" {
-		return errors.New("usage: tado-bridge auth {login|status|logout} | discover")
+		return errors.New("usage: tado-bridge auth {login|status|logout} | discover | read")
 	}
 	if path == "" {
 		return errors.New("set TADO_CREDENTIALS_FILE to a private file path")
@@ -87,11 +87,16 @@ func run(ctx context.Context, args []string, path string, stdout, stderr io.Writ
 			return fmt.Errorf("cannot persist rotated credentials: %w", err)
 		}
 	}
-	discovery, err := client.Discover(ctx, token)
+	var result any
+	if command == "read" {
+		result, err = client.Read(ctx, token)
+	} else {
+		result, err = client.Discover(ctx, token)
+	}
 	if err != nil {
 		return err
 	}
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(discovery)
+	return encoder.Encode(result)
 }

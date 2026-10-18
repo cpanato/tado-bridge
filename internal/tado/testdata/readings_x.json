@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1, "name": "Living room",
+    "sensorDataPoints": {"insideTemperature": {"value": 21.5}, "humidity": {"percentage": 48}},
+    "setting": {"power": "ON", "temperature": {"value": 22}},
+    "heatingPower": {"percentage": 35},
+    "connection": {"state": "CONNECTED"},
+    "privateMetadata": "PRIVATE-X"
+  },
+  {
+    "id": 2, "name": "Bedroom",
+    "sensorDataPoints": {"insideTemperature": {"value": 0}, "humidity": {"percentage": 0}},
+    "setting": {"power": "OFF", "temperature": {"value": 17}},
+    "heatingPower": {"percentage": 0}
+  },
+  {"id": 3, "name": "Missing sensors", "setting": {"power": "ON", "temperature": {"value": 22}}}
+]

@@ -1,8 +1,10 @@
 # tado-bridge — Technical Design Document
 
-Status: Proposed | Version: 0.3 | Implementation language: Go
+Status: Proposed | Version: 0.4 | Implementation language: Go
 
 M1 scope amendment: cloud discovery now includes tado° X, explicitly authorized after live verification identified the operator's home as `LINE_X`. Detect generation per home and normalize V3 zones and X rooms into the same provider-neutral discovery model. Local Matter support remains out of scope.
+
+Post-M1 amendment: M1 is merged. A one-shot `tado-bridge read` command is authorized to validate normalized measurements before the M2 service: measured/target temperature, humidity, explicit heating-power activity and available sensor timestamps. It supports V3/V3+ and X, has no polling or HTTP listener, and returns no partial snapshot on failure. Periodic collection, cache and the local HTTP API remain M2 work.
 
 ## 1. Summary
 
