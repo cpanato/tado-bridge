@@ -1,0 +1,13 @@
+{
+  "rooms": [
+    {"roomId": 1, "roomName": "Room 1", "devices": [{"serialNumber": "PRIVATE-SERIAL", "connection": {"state": "CONNECTED"}}]},
+    {"roomId": 2, "roomName": "Room 2", "devices": []},
+    {"roomId": 3, "roomName": "Room 3", "devices": []},
+    {"roomId": 4, "roomName": "Room 4", "devices": []},
+    {"roomId": 5, "roomName": "Room 5", "devices": []},
+    {"roomId": 6, "roomName": "Room 6", "devices": []},
+    {"roomId": 7, "roomName": "Room 7", "devices": []},
+    {"roomId": 8, "roomName": "Room 8", "devices": []}
+  ],
+  "otherDevices": [{"serialNumber": "PRIVATE-BRIDGE"}]
+}
