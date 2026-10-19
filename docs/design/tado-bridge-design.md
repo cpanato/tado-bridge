@@ -162,7 +162,7 @@ tado-bridge/
   LICENSE                      # choose deliberately
 ```
 
-Keep package boundaries pragmatic. Prefer Go standard library; a maintained OAuth2 dependency and Prometheus client are acceptable where they reduce security or maintenance risk. Avoid a generic plugin framework.
+Keep package boundaries pragmatic. Prefer Go standard library; Cobra is explicitly approved for CLI command routing and help, isolated in `internal/cli/`. A maintained OAuth2 dependency and Prometheus client are acceptable where they reduce security or maintenance risk. Avoid a generic plugin framework.
 
 ## 10. Security and privacy
 

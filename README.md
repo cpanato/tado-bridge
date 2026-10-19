@@ -4,7 +4,7 @@ Small, read-only Go CLI for tado° V3/V3+ and X. This repository implements M1 O
 
 ## Prerequisites and local use
 
-Go 1.27.2 or newer, a tado° account, internet access and a browser for authorization. No third-party Go dependencies. Both V3/V3+ and X cloud discovery are supported; local Matter access is outside this milestone.
+Go 1.27.2 or newer, a tado° account, internet access and a browser for authorization. The CLI uses [Cobra](https://github.com/spf13/cobra); provider and credential handling use the Go standard library. Both V3/V3+ and X cloud discovery are supported; local Matter access is outside this milestone.
 
 Use the latest stable Go release and the latest stable versions of any dependencies when adding or updating them; verify current upstream releases and run the project checks after upgrades.
 
@@ -18,6 +18,8 @@ export TADO_CREDENTIALS_FILE="$HOME/.config/tado-bridge/credentials.json"
 ```
 
 Login prints a complete verification URL and user code to stderr. Open the entire URL (including its query parameters), enter the code if prompted and authorize with tado°. The URL includes the client ID and user code; opening the bare `/oauth2/device` URL can produce a `missing_client_id` error. The CLI waits at the upstream polling interval, handles pending/slow-down responses and stops at expiry or Ctrl-C. It never asks for your account password. Do not share the authorization URL, code or tokens.
+
+Run `./bin/tado-bridge` or `./bin/tado-bridge auth` to see available commands. Every command supports `--help`/`-h`, for example `./bin/tado-bridge read --help` or `./bin/tado-bridge help auth login`. Help works without credentials and never contacts tado°. Operational commands still require `TADO_CREDENTIALS_FILE` and reject unexpected arguments before accessing credentials.
 
 `discover` prints filtered JSON to stdout, with IDs as strings:
 
@@ -64,6 +66,8 @@ Access tokens are reused until within 30 seconds of their reported expiry. Rotat
 go test ./...
 go vet ./...
 go test -race ./...
+go mod verify
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
 
 Tests use synthetic fixtures and local HTTP servers; no real credentials or upstream calls are required. If your environment restricts the default Go build cache, set `GOCACHE` to a writable directory.
