@@ -18,12 +18,13 @@ import (
 type Read func(context.Context) (domain.Snapshot, int, error)
 
 type Options struct {
-	Interval time.Duration
-	Budget   *Budget
-	Now      func() time.Time
-	Wait     func(context.Context, time.Duration) error
-	Jitter   func(time.Duration) time.Duration
-	Logger   *slog.Logger
+	Interval          time.Duration
+	Budget            *Budget
+	Now               func() time.Time
+	Wait              func(context.Context, time.Duration) error
+	Jitter            func(time.Duration) time.Duration
+	Logger            *slog.Logger
+	ObserveCollection func(error)
 }
 
 type Collector struct {
@@ -95,6 +96,9 @@ func (c *Collector) Run(ctx context.Context) error {
 		}
 		if err == nil {
 			err = c.store.Save(snapshot)
+		}
+		if c.options.ObserveCollection != nil {
+			c.options.ObserveCollection(err)
 		}
 		cadence := max(c.options.Interval, c.options.Budget.Pace(expected))
 		delay = cadence

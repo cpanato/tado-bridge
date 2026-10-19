@@ -16,6 +16,7 @@ type Options struct {
 	MaxSnapshotAge time.Duration
 	APIToken       string
 	Now            func() time.Time
+	MetricsHandler http.Handler
 }
 
 func New(cache *store.Store, options Options) http.Handler {
@@ -53,9 +54,7 @@ func New(cache *store.Store, options Options) http.Handler {
 		if !get(w, r) {
 			return
 		}
-		if options.APIToken != "" && !authorized(r, options.APIToken) {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			failure(w, http.StatusUnauthorized, "unauthorized", "A valid bearer token is required.")
+		if !authenticate(w, r, options.APIToken) {
 			return
 		}
 		view, ok := cache.Load()
@@ -68,10 +67,28 @@ func New(cache *store.Store, options Options) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(view.JSON)
 	})
+	if options.MetricsHandler != nil {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if !get(w, r) || !authenticate(w, r, options.APIToken) {
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			options.MetricsHandler.ServeHTTP(w, r)
+		})
+	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		failure(w, http.StatusNotFound, "not_found", "Unknown endpoint.")
 	})
 	return mux
+}
+
+func authenticate(w http.ResponseWriter, r *http.Request, token string) bool {
+	if token == "" || authorized(r, token) {
+		return true
+	}
+	w.Header().Set("WWW-Authenticate", "Bearer")
+	failure(w, http.StatusUnauthorized, "unauthorized", "A valid bearer token is required.")
+	return false
 }
 
 func authorized(r *http.Request, token string) bool {

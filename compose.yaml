@@ -1,0 +1,28 @@
+services:
+  tado-bridge:
+    build: .
+    image: tado-bridge:local
+    user: "${TADO_BRIDGE_UID:-65532}:${TADO_BRIDGE_GID:-65532}"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${TADO_BRIDGE_PORT:-8080}:8080"
+    environment:
+      LISTEN_ADDR: "0.0.0.0:8080"
+      ALLOW_NETWORK_EXPOSURE: "true"
+      API_TOKEN: "${API_TOKEN:?Set API_TOKEN before starting Compose}"
+      TADO_CREDENTIALS_FILE: /var/lib/tado-bridge/credentials.json
+      POLL_INTERVAL: "${POLL_INTERVAL:-30m}"
+      MAX_SNAPSHOT_AGE: "${MAX_SNAPSHOT_AGE:-2h}"
+      TADO_DAILY_REQUEST_BUDGET: "${TADO_DAILY_REQUEST_BUDGET:-90}"
+      METRICS_ENABLED: "${METRICS_ENABLED:-false}"
+    volumes:
+      - type: bind
+        source: "${TADO_CREDENTIALS_DIR:?Set TADO_CREDENTIALS_DIR to the existing private credentials directory}"
+        target: /var/lib/tado-bridge
+        bind:
+          create_host_path: false
+    stop_grace_period: 10s

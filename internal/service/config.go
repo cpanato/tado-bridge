@@ -14,6 +14,7 @@ type Config struct {
 	MaxSnapshotAge time.Duration
 	DailyBudget    int
 	APIToken       string
+	MetricsEnabled bool
 }
 
 // LoadConfig accepts literal bind addresses, resolving localhost to loopback
@@ -54,12 +55,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	metrics, err := boolean(getenv, "METRICS_ENABLED")
+	config.MetricsEnabled, err = boolean(getenv, "METRICS_ENABLED")
 	if err != nil {
 		return Config{}, err
-	}
-	if metrics {
-		return Config{}, errors.New("METRICS_ENABLED is not supported until the metrics milestone")
 	}
 	host, port, err := net.SplitHostPort(config.ListenAddr)
 	if err != nil {

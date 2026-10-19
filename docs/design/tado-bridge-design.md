@@ -1,12 +1,14 @@
 # tado-bridge — Technical Design Document
 
-Status: Proposed | Version: 0.5 | Implementation language: Go
+Status: M3 implemented; acceptance pending | Version: 0.6 | Implementation language: Go
 
 M1 scope amendment: cloud discovery now includes tado° X, explicitly authorized after live verification identified the operator's home as `LINE_X`. Detect generation per home and normalize V3 zones and X rooms into the same provider-neutral discovery model. Local Matter support remains out of scope.
 
 Post-M1 amendment: M1 is merged. A one-shot `tado-bridge read` command is authorized to validate normalized measurements before the M2 service: measured/target temperature, humidity, explicit heating-power activity and available sensor timestamps. It supports V3/V3+ and X, has no polling or HTTP listener, and returns no partial snapshot on failure. Periodic collection, cache and the local HTTP API remain M2 work.
 
 M2 implementation note: `serve` now implements collection, cache and the local API. `POLL_INTERVAL=30m` is a requested minimum; the effective delay grows to fit the rolling request budget, default 90 attempted REST/OAuth calls per 24 hours. One X home reserves four calls per cycle and therefore waits at least 64 minutes with defaults. Budget accounting is process-local and resets on restart; the upstream account quota remains authoritative. See `docs/architecture.md` for scheduling and operational boundaries.
+
+M3 implementation note: optional Prometheus metrics use cached aggregates without home/zone labels. Distroless nonroot containers support Linux/amd64 and Linux/arm64, with read-only root filesystems and a writable private credentials directory for token rotation. CI builds and tests images locally without publishing. See `docs/containers.md`, `docs/metrics.md`, `SECURITY.md` and `docs/releases.md`. TRMNL remains M4.
 
 ## 1. Summary
 
@@ -214,7 +216,7 @@ Keep package boundaries pragmatic. Prefer Go standard library; Cobra is explicit
 1. Exact V3/V3+ API access rules, client credentials and quota at implementation time.
 2. Which zone fields reliably expose active heating state versus inferred state?
 3. Whether more than one home needs support in the first deployment.
-4. Whether to enable Prometheus in M3 or defer until demanded.
+4. Prometheus is implemented in M3 and remains disabled by default.
 5. Deployment target: NUC systemd vs Docker vs k3s; the app should support all without coupling to one.
 
 ## 14. Codex implementation instructions

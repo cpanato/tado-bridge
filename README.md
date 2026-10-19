@@ -1,6 +1,6 @@
 # tado-bridge
 
-Small, read-only Go CLI and local service for tado° V3/V3+ and X. M1 covers OAuth/discovery, the `read` command provides one-shot measurements, and M2 adds periodic collection, cached JSON, health and readiness. Metrics, container packaging and outbound integrations remain later milestones. No thermostat controls are implemented.
+Small, read-only Go CLI and local service for tado° V3/V3+ and X. M1 covers OAuth/discovery, the `read` command provides one-shot measurements, and M2 adds periodic collection, cached JSON, health and readiness. M3 adds optional Prometheus metrics, nonroot containers and CI runtime checks. Outbound integrations remain a later milestone. No thermostat controls are implemented.
 
 ## Prerequisites and local use
 
@@ -19,7 +19,7 @@ export TADO_CREDENTIALS_FILE="$HOME/.config/tado-bridge/credentials.json"
 
 Login prints a complete verification URL and user code to stderr. Open the entire URL (including its query parameters), enter the code if prompted and authorize with tado°. The URL includes the client ID and user code; opening the bare `/oauth2/device` URL can produce a `missing_client_id` error. The CLI waits at the upstream polling interval, handles pending/slow-down responses and stops at expiry or Ctrl-C. It never asks for your account password. Do not share the authorization URL, code or tokens.
 
-Run `./bin/tado-bridge` or `./bin/tado-bridge auth` to see available commands. Every command supports `--help`/`-h`, for example `./bin/tado-bridge read --help` or `./bin/tado-bridge serve --help`. Help works without credentials and never contacts tado°. Operational commands still require `TADO_CREDENTIALS_FILE` and reject unexpected arguments before accessing credentials.
+Run `./bin/tado-bridge` or `./bin/tado-bridge auth` to see available commands. Every command supports `--help`/`-h`, for example `./bin/tado-bridge read --help` or `./bin/tado-bridge serve --help`. Help works without credentials and never contacts tado°. Commands that access tado° require `TADO_CREDENTIALS_FILE` and reject unexpected arguments before accessing credentials. `healthcheck` checks the local HTTP process without opening credentials or contacting tado°.
 
 `discover` prints filtered JSON to stdout, with IDs as strings:
 
@@ -32,7 +32,7 @@ Run `./bin/tado-bridge` or `./bin/tado-bridge auth` to see available commands. E
 
 Discovery automatically checks each home's generation: V3/V3+ uses the zones endpoint; X uses the rooms-and-devices endpoint. X rooms are exposed as `zones` with the same ID/name fields, including in accounts with mixed home generations. Only IDs and names are copied by `discover`; email, addresses, account metadata, device serials and credentials are excluded. Names and stable IDs are still private: take care when saving or sharing this output.
 
-Request counts are printed separately to stderr, including on failure. A discovery with H homes makes `1 + 2*H` REST requests: one home list, then generation and zone/room discovery per home. Expired credentials add one OAuth refresh. There are no automatic API retries, including on 401 or 429. Correct an authorization problem with `auth login`; wait for quota recovery after 429. M2 will handle budgets, Retry-After and scheduled retries.
+Request counts are printed separately to stderr, including on failure. A discovery with H homes makes `1 + 2*H` REST requests: one home list, then generation and zone/room discovery per home. Expired credentials add one OAuth refresh. There are no automatic API retries, including on 401 or 429. Correct an authorization problem with `auth login`; wait for quota recovery after 429. `serve` handles budgets, Retry-After and scheduled retries.
 
 ## One-shot measurements
 
@@ -73,9 +73,9 @@ The first collection starts immediately; snapshot/readiness return 503 until dat
 | `POLL_INTERVAL` | `30m` | Requested minimum delay; at least `5m`, increased to fit the request budget |
 | `MAX_SNAPSHOT_AGE` | `2h` | Maximum collection age for readiness |
 | `TADO_DAILY_REQUEST_BUDGET` | `90` | Rolling 24-hour cap on attempted REST and OAuth requests in this service process |
-| `API_TOKEN` | unset | Optional bearer token protecting `/api/v1/snapshot`; never logged |
+| `API_TOKEN` | unset | Optional bearer token protecting `/api/v1/snapshot` and enabled `/metrics`; never logged |
 | `ALLOW_NETWORK_EXPOSURE` | `false` | Non-loopback binds require this opt-in and a nonempty `API_TOKEN` |
-| `METRICS_ENABLED` | `false` | Metrics are deferred; setting this to true currently fails configuration validation |
+| `METRICS_ENABLED` | `false` | Enable cached Prometheus metrics at `/metrics`; see [metrics](docs/metrics.md) |
 
 The effective interval is at least `24h * estimated cycle requests / budget`. For one X home, reserving three REST calls plus one refresh yields **64 minutes** with the default budget. The configured 30-minute delay therefore does not imply 48 collections/day. Larger V3 accounts may need a larger `MAX_SNAPSHOT_AGE` to match their effective cadence. Request attempts, including retries, count against the same cap; 429 respects upstream reset deadlines, and transient errors have bounded retries with jitter.
 
@@ -100,11 +100,11 @@ go test ./...
 go vet ./...
 go test -race ./...
 go mod verify
-go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+make check
 ```
 
-Tests use synthetic fixtures and local HTTP servers; no real credentials or upstream calls are required. If your environment restricts the default Go build cache, set `GOCACHE` to a writable directory.
+`make check` also requires golangci-lint v2.15.0. Tests use synthetic fixtures and local HTTP servers; no real credentials or upstream calls are required. If your environment restricts the default Go build cache, set `GOCACHE` to a writable directory.
 
-GitHub Actions runs formatting checks, race tests, vet and module verification on pushes to `main` and pull requests, using the latest stable Go release. It also cross-compiles Linux and macOS binaries for amd64/arm64. A separate Zizmor workflow audits the Actions configuration. Actions are pinned by commit SHA; Dependabot checks Go modules and Actions weekly, without an update cooldown.
+GitHub Actions runs formatting checks, race tests, vet, lint, vulnerability checks and module verification on pushes to `main` and pull requests, using the latest stable Go release. It also cross-compiles Linux and macOS binaries for amd64/arm64 and builds/tests Linux containers for both architectures using synthetic credentials with networking disabled. Images are never pushed. A separate Zizmor workflow audits the Actions configuration. Actions are pinned by commit SHA; Dependabot checks Go modules, Actions and Docker base images weekly, without an update cooldown.
 
-See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. M2 remains independent of displays/dashboards. Containers and optional metrics belong to M3; the opt-in TRMNL adapter is M4.
+See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. The service remains independent of displays/dashboards. See [container setup](docs/containers.md), [metrics](docs/metrics.md), [security](SECURITY.md) and [release policy](docs/releases.md). The opt-in TRMNL adapter is M4.

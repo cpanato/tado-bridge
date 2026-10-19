@@ -113,3 +113,40 @@ func TestBearerAndMethods(t *testing.T) {
 		t.Fatal("accepted ambiguous authorization")
 	}
 }
+
+func TestMetricsAreOptionalAndAuthenticated(t *testing.T) {
+	calls := 0
+	metrics := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("test_metric 1\n"))
+	})
+	for _, enabled := range []bool{false, true} {
+		options := Options{MaxSnapshotAge: time.Hour, APIToken: "test-secret"}
+		if enabled {
+			options.MetricsHandler = metrics
+		}
+		handler := New(&store.Store{}, options)
+		for _, auth := range []bool{false, true} {
+			req := httptest.NewRequest("GET", "/metrics", nil)
+			if auth {
+				req.Header.Set("Authorization", "Bearer test-secret")
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+			expected := 404
+			if enabled {
+				expected = 401
+				if auth {
+					expected = 200
+				}
+			}
+			if response.Code != expected {
+				t.Fatalf("enabled=%v auth=%v status=%d", enabled, auth, response.Code)
+			}
+		}
+	}
+	if calls != 1 {
+		t.Fatal("disabled or unauthenticated scrape reached exporter")
+	}
+}
