@@ -25,6 +25,8 @@ type Client struct {
 	now                        func() time.Time
 	wait                       func(context.Context, time.Duration) error
 	OAuthRequests, APIRequests int
+	requestGuard               func(context.Context) error
+	notBefore                  time.Time
 }
 
 func New() *Client {
@@ -48,14 +50,32 @@ func wait(ctx context.Context, duration time.Duration) error {
 }
 
 type responseError struct {
-	status int
-	code   string
+	status  int
+	code    string
+	retryAt time.Time
 }
 
-func (e *responseError) Error() string { return fmt.Sprintf("upstream HTTP %d", e.status) }
+func (e *responseError) Error() string      { return fmt.Sprintf("upstream HTTP %d", e.status) }
+func (e *responseError) Temporary() bool    { return e.status == 429 || e.status >= 500 }
+func (e *responseError) RetryAt() time.Time { return e.retryAt }
+
+type transportError struct{}
+
+func (*transportError) Error() string   { return "upstream request failed (network error or timeout)" }
+func (*transportError) Temporary() bool { return true }
+
+// SetRequestGuard installs per-request accounting for a single-owner client.
+// Configure it before collection starts; it also applies to OAuth refreshes.
+func (c *Client) SetRequestGuard(guard func(context.Context) error) { c.requestGuard = guard }
 
 // Upstream bodies and transport URLs may contain secrets; never include them in errors.
 func (c *Client) request(ctx context.Context, method, endpoint, bearer string, form url.Values, dst any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if c.now().Before(c.notBefore) {
+		return &responseError{status: 429, retryAt: c.notBefore}
+	}
 	var body io.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -70,6 +90,11 @@ func (c *Client) request(ctx context.Context, method, endpoint, bearer string, f
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
+	if c.requestGuard != nil {
+		if err := c.requestGuard(ctx); err != nil {
+			return err
+		}
+	}
 	if form != nil {
 		c.OAuthRequests++
 	} else {
@@ -80,15 +105,22 @@ func (c *Client) request(ctx context.Context, method, endpoint, bearer string, f
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return errors.New("upstream request failed (network error or timeout)")
+		return &transportError{}
 	}
 	defer resp.Body.Close()
+	retryAt := retryDeadline(resp.Header, c.now())
+	if resp.StatusCode == http.StatusTooManyRequests {
+		if retryAt.IsZero() {
+			retryAt = c.now().Add(time.Hour)
+		}
+		c.notBefore = retryAt
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var payload struct {
 			Error string `json:"error"`
 		}
 		_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload)
-		return &responseError{status: resp.StatusCode, code: payload.Error}
+		return &responseError{status: resp.StatusCode, code: payload.Error, retryAt: retryAt}
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(dst); err != nil {
 		return errors.New("invalid upstream JSON response")
