@@ -1,6 +1,6 @@
 # tado-bridge — Technical Design Document
 
-Status: M3 implemented; acceptance pending | Version: 0.6 | Implementation language: Go
+Status: M3 merged; M4 implementation, live acceptance pending | Version: 0.7 | Implementation language: Go
 
 M1 scope amendment: cloud discovery now includes tado° X, explicitly authorized after live verification identified the operator's home as `LINE_X`. Detect generation per home and normalize V3 zones and X rooms into the same provider-neutral discovery model. Local Matter support remains out of scope.
 
@@ -9,6 +9,8 @@ Post-M1 amendment: M1 is merged. A one-shot `tado-bridge read` command is author
 M2 implementation note: `serve` now implements collection, cache and the local API. `POLL_INTERVAL=30m` is a requested minimum; the effective delay grows to fit the rolling request budget, default 90 attempted REST/OAuth calls per 24 hours. One X home reserves four calls per cycle and therefore waits at least 64 minutes with defaults. Budget accounting is process-local and resets on restart; the upstream account quota remains authoritative. See `docs/architecture.md` for scheduling and operational boundaries.
 
 M3 implementation note: optional Prometheus metrics use cached aggregates without home/zone labels. Distroless nonroot containers support Linux/amd64 and Linux/arm64, with read-only root filesystems and a writable private credentials directory for token rotation. CI builds and tests images locally without publishing. See `docs/containers.md`, `docs/metrics.md`, `SECURITY.md` and `docs/releases.md`. TRMNL remains M4.
+
+M4 implementation note: the disabled-by-default TRMNL adapter publishes only explicitly selected cached rooms to an official private-plugin HTTPS webhook. Templates and a synthetic eight-room fixture support manual browser/virtual-device acceptance; no real webhook is called by tests. See `integrations/trmnl/README.md`.
 
 ## 1. Summary
 

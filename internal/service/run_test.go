@@ -10,6 +10,7 @@ import (
 
 	"github.com/cpanato/tado-bridge/internal/domain"
 	"github.com/cpanato/tado-bridge/internal/httpapi"
+	"github.com/cpanato/tado-bridge/internal/integrations/trmnl"
 	"github.com/cpanato/tado-bridge/internal/store"
 )
 
@@ -35,9 +36,11 @@ func TestLocalServiceCacheAndShutdown(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}
+	publisher := trmnl.New(trmnl.Config{Enabled: true, WebhookURL: "https://127.0.0.1:1/api/custom_plugins/fixture", Interval: 30 * time.Minute, Rooms: []trmnl.Room{{HomeID: "fixture", ZoneID: "fixture", Name: "Room 1"}}}, cache, time.Hour, nil)
+	joined := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, listener, httpapi.New(cache, httpapi.Options{MaxSnapshotAge: time.Hour}), collect)
+		done <- Run(ctx, listener, httpapi.New(cache, httpapi.Options{MaxSnapshotAge: time.Hour}), collect, func(ctx context.Context) error { defer close(joined); return publisher.Run(ctx) })
 	}()
 	<-started
 	client := &http.Client{Timeout: time.Second}
@@ -64,6 +67,11 @@ func TestLocalServiceCacheAndShutdown(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("service did not stop")
+	}
+	select {
+	case <-joined:
+	default:
+		t.Fatal("publisher was not joined")
 	}
 	client.CloseIdleConnections()
 	connection, err := net.DialTimeout("tcp", address, 100*time.Millisecond)

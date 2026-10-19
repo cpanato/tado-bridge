@@ -13,6 +13,7 @@ import (
 	"github.com/cpanato/tado-bridge/internal/credentials"
 	"github.com/cpanato/tado-bridge/internal/domain"
 	"github.com/cpanato/tado-bridge/internal/httpapi"
+	"github.com/cpanato/tado-bridge/internal/integrations/trmnl"
 	"github.com/cpanato/tado-bridge/internal/metrics"
 	"github.com/cpanato/tado-bridge/internal/service"
 	"github.com/cpanato/tado-bridge/internal/store"
@@ -21,6 +22,10 @@ import (
 
 func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 	config, err := service.LoadConfig(os.Getenv)
+	if err != nil {
+		return err
+	}
+	trmnlConfig, err := trmnl.LoadConfig(os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -68,5 +73,9 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 	}
 	logger.Info("HTTP service started", "listen", listener.Addr().String(), "requested_poll_interval", config.PollInterval, "request_budget", config.DailyBudget)
 	handler := httpapi.New(cache, httpapi.Options{MaxSnapshotAge: config.MaxSnapshotAge, APIToken: config.APIToken, MetricsHandler: metricsHandler})
+	if trmnlConfig.Enabled {
+		publisher := trmnl.New(trmnlConfig, cache, config.MaxSnapshotAge, logger)
+		return service.Run(cmd.Context(), listener, handler, poller.Run, publisher.Run)
+	}
 	return service.Run(cmd.Context(), listener, handler, poller.Run)
 }

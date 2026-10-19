@@ -40,4 +40,6 @@ Only GET is accepted. JSON responses use `application/json` and `Cache-Control: 
 
 SIGINT/SIGTERM cancels waits and upstream HTTP requests, stops accepting HTTP traffic and waits for both the collector and server to exit before releasing the credentials lock. HTTP shutdown has a five-second deadline and closes remaining connections if necessary. A force-killed process can leave the existing lock directory; verify it is not running before removing that lock.
 
-The service has no outbound integrations. M3 adds [nonroot container packaging](containers.md), runtime checks and operational documentation. TRMNL, releases and deployments require separate authorization. Future adapters consume cached snapshots and never obtain a provider client.
+M4 adds an [optional TRMNL publisher](../integrations/trmnl/README.md) that receives only the snapshot store. It runs as a separate background task, serializes bounded webhook sends and never obtains a tado client. Remote failures remain inside its retry loop; collection and REST continue normally. It is disabled by default and requires explicit room selection. Service shutdown cancels and joins the publisher along with the collector/server before releasing credentials.
+
+M3 adds [nonroot container packaging](containers.md), runtime checks and operational documentation. Real TRMNL sending requires an explicit runtime opt-in; releases and deployments require separate authorization. Future adapters consume cached snapshots and never obtain a provider client.

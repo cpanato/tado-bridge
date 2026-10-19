@@ -1,0 +1,70 @@
+<style>
+.tb-quadrant.layout { font-family:Arial,sans-serif; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; gap:10px; padding:12px; }
+.tb-quadrant .tb-heading { display:flex; align-items:center; justify-content:space-between; min-height:20px; gap:8px; font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; }
+.tb-quadrant .tb-stale { padding:3px 6px; border-radius:4px; color:white; background:black; font-size:10px; letter-spacing:.4px; }
+.tb-quadrant .tb-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(1,minmax(0,1fr)); gap:10px; flex:1; min-height:0; }
+.tb-quadrant .tb-card { display:flex; flex-direction:column; justify-content:space-between; gap:6px; min-width:0; min-height:0; padding:12px; border:1px solid black; border-radius:8px; }
+.tb-quadrant .tb-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:17px; font-weight:600; line-height:1.2; }
+.tb-quadrant .tb-reading { display:flex; align-items:baseline; gap:2px; white-space:nowrap; }
+.tb-quadrant .tb-temperature { font-size:50px; font-weight:700; letter-spacing:-2px; line-height:1.05; font-variant-numeric:tabular-nums; }
+.tb-quadrant .tb-unit { font-size:18px; }
+.tb-quadrant .tb-details { display:flex; justify-content:space-between; gap:4px; padding-top:7px; border-top:1px solid black; font-size:11px; white-space:nowrap; }
+.tb-quadrant .tb-heat { display:flex; align-items:center; gap:5px; font-size:10px; line-height:1; }
+.tb-quadrant .tb-dot { display:inline-block; width:6px; height:6px; border:1px solid black; border-radius:50%; }
+.tb-quadrant .tb-dot--active { background:black; }
+.tb-quadrant .tb-empty { margin:auto; text-align:center; font-size:18px; }
+.tb-quadrant.layout { gap:6px; padding:8px; }
+.tb-quadrant .tb-card { gap:4px; padding:9px; }
+.tb-quadrant .tb-name { font-size:15px; }
+.tb-quadrant .tb-temperature { font-size:36px; }
+.tb-quadrant .tb-details { padding-top:5px; font-size:10px; }
+.tb-quadrant-footer.title_bar .title, .tb-quadrant-footer.title_bar .instance { font-family:Arial,sans-serif; font-size:12px; font-weight:600; -webkit-text-stroke:0!important; text-shadow:none!important; filter:none!important; }
+</style>
+{% assign now_seconds = 'now' | date: '%s' | plus: 0 %}
+{% assign collection_seconds = collected_at | date: '%s' | plus: 0 %}
+{% assign age_seconds = now_seconds | minus: collection_seconds %}
+{% assign age_limit = max_age_seconds | default: 7200 %}
+<div class="layout tb-quadrant">
+  {% if collected_at == nil %}
+    <div class="tb-empty">Waiting for a collection</div>
+  {% else %}
+    <div class="tb-heading">
+      <span>Temperature &amp; comfort</span>
+      {% if stale or age_seconds > age_limit %}
+        <span class="tb-stale">STALE DATA</span>
+      {% elsif rooms.size > 2 %}
+        <span>2 / {{ rooms.size }} rooms</span>
+      {% else %}
+        <span>{{ rooms.size }} rooms</span>
+      {% endif %}
+    </div>
+    <div class="tb-grid">
+    {% for room in rooms limit: 2 %}
+      <div class="tb-card">
+        <span class="tb-name">{{ room.name | escape }}</span>
+        <div class="tb-reading">
+          <span class="tb-temperature">{% if room.temperature_c != nil %}{{ room.temperature_c | round: 1 }}{% else %}—{% endif %}</span>
+          {% if room.temperature_c != nil %}<span class="tb-unit">°C</span>{% endif %}
+        </div>
+        <div class="tb-details">
+          <span>Target {% if room.target_temperature_c != nil %}{{ room.target_temperature_c | round: 1 }}°{% else %}—{% endif %}</span>
+          <span>Humidity {% if room.humidity_percent != nil %}{{ room.humidity_percent | round }}%{% else %}—{% endif %}</span>
+        </div>
+        <span class="tb-heat">
+          {% if room.heating_active == nil %}
+            <span class="tb-dot"></span>Heat unknown
+          {% elsif room.heating_active %}
+            <span class="tb-dot tb-dot--active"></span>Heating
+          {% else %}
+            <span class="tb-dot"></span>Idle
+          {% endif %}
+        </span>
+      </div>
+    {% endfor %}
+    </div>
+  {% endif %}
+</div>
+<div class="title_bar tb-quadrant-footer">
+  <span class="title">Indoor climate</span>
+  <span class="instance">{% if collected_at %}{{ collected_at | date: '%d %b %H:%M' }} UTC{% if rooms.size > 2 %} · 2/{{ rooms.size }} rooms{% endif %}{% else %}tado-bridge{% endif %}</span>
+</div>

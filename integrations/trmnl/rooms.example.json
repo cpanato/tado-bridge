@@ -1,0 +1,42 @@
+[
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_1",
+    "name": "Room 1"
+  },
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_2",
+    "name": "Room 2"
+  },
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_3",
+    "name": "Room 3"
+  },
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_4",
+    "name": "Room 4"
+  },
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_5",
+    "name": "Room 5"
+  },
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_6",
+    "name": "Room 6"
+  },
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_7",
+    "name": "Room 7"
+  },
+  {
+    "home_id": "REPLACE_HOME_ID",
+    "zone_id": "REPLACE_ZONE_8",
+    "name": "Room 8"
+  }
+]

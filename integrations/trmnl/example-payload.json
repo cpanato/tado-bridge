@@ -1,0 +1,75 @@
+{
+  "merge_variables": {
+    "source": "tado-bridge",
+    "collected_at": "2026-10-19T10:00:00Z",
+    "published_at": "2026-10-19T10:00:01Z",
+    "max_age_seconds": 7200,
+    "stale": false,
+    "rooms": [
+      {
+        "name": "Living room",
+        "available": true,
+        "temperature_c": 19.5,
+        "target_temperature_c": 21,
+        "humidity_percent": 41,
+        "heating_active": true
+      },
+      {
+        "name": "Kitchen",
+        "available": true,
+        "temperature_c": 20.0,
+        "target_temperature_c": null,
+        "humidity_percent": 42,
+        "heating_active": false
+      },
+      {
+        "name": "Bedroom",
+        "available": true,
+        "temperature_c": 20.5,
+        "target_temperature_c": 21,
+        "humidity_percent": null,
+        "heating_active": true
+      },
+      {
+        "name": "Office",
+        "available": true,
+        "temperature_c": 21.0,
+        "target_temperature_c": null,
+        "humidity_percent": 44,
+        "heating_active": null
+      },
+      {
+        "name": "Nursery",
+        "available": true,
+        "temperature_c": 21.5,
+        "target_temperature_c": 21,
+        "humidity_percent": 45,
+        "heating_active": true
+      },
+      {
+        "name": "Bathroom",
+        "available": true,
+        "temperature_c": 22.0,
+        "target_temperature_c": null,
+        "humidity_percent": 46,
+        "heating_active": false
+      },
+      {
+        "name": "Hall",
+        "available": true,
+        "temperature_c": 22.5,
+        "target_temperature_c": 21,
+        "humidity_percent": 47,
+        "heating_active": true
+      },
+      {
+        "name": "Garage",
+        "available": true,
+        "temperature_c": 0,
+        "target_temperature_c": null,
+        "humidity_percent": 48,
+        "heating_active": false
+      }
+    ]
+  }
+}
