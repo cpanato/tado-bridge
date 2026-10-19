@@ -19,6 +19,10 @@ services:
       MAX_SNAPSHOT_AGE: "${MAX_SNAPSHOT_AGE:-2h}"
       TADO_DAILY_REQUEST_BUDGET: "${TADO_DAILY_REQUEST_BUDGET:-90}"
       METRICS_ENABLED: "${METRICS_ENABLED:-false}"
+      TRMNL_ENABLED: "${TRMNL_ENABLED:-false}"
+      TRMNL_WEBHOOK_URL: "${TRMNL_WEBHOOK_URL:-}"
+      TRMNL_INTERVAL: "${TRMNL_INTERVAL:-30m}"
+      TRMNL_ROOMS: "${TRMNL_ROOMS:-}"
     volumes:
       - type: bind
         source: "${TADO_CREDENTIALS_DIR:?Set TADO_CREDENTIALS_DIR to the existing private credentials directory}"

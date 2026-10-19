@@ -21,3 +21,7 @@ The runtime image defaults to UID/GID 65532, has no shell and includes only the 
 The rolling upstream budget is process-local. Restarts and other clients are not included in its history and do not reset tado's account quota. Cache freshness refers to collection time, not proof of a fresh sensor reading. Stale cached data remain accessible; clients must check timestamps/readiness.
 
 Images and Actions are pinned to immutable digests/commit SHAs. Dependabot checks Go modules, Actions and Docker bases. CI builds and exercises containers without pushing them, using synthetic credentials and disabled runtime networking. There is no registry login, publish, tag or deployment workflow.
+
+## Optional external consumers
+
+M4 TRMNL publishing is disabled by default. Enabling it shares explicitly selected climate readings, display aliases and timestamps with TRMNL cloud. Treat `TRMNL_WEBHOOK_URL` as a bearer secret; it is never included in errors, logs or payloads. Home/zone IDs are used only for local selection. Redirects and HTTP proxy environment variables are disabled for webhook requests, and only official HTTPS private-plugin destinations are accepted. The account/device plugin must be configured manually; no account credentials are needed by the bridge. See [TRMNL setup](integrations/trmnl/README.md).

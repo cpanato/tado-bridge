@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-// Run starts collection and HTTP serving together, then joins both before return.
-func Run(ctx context.Context, listener net.Listener, handler http.Handler, collect func(context.Context) error) error {
+// Run starts collection, HTTP serving and optional background tasks together,
+// then cancels and joins every task before return.
+func Run(ctx context.Context, listener net.Listener, handler http.Handler, collect func(context.Context) error, background ...func(context.Context) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer func() { _ = listener.Close() }()
@@ -23,7 +24,7 @@ func Run(ctx context.Context, listener net.Listener, handler http.Handler, colle
 		MaxHeaderBytes:    8 << 10,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
-	completed := make(chan error, 2)
+	completed := make(chan error, 2+len(background))
 	go func() { completed <- collect(ctx) }()
 	go func() {
 		err := server.Serve(listener)
@@ -32,8 +33,11 @@ func Run(ctx context.Context, listener net.Listener, handler http.Handler, colle
 		}
 		completed <- err
 	}()
+	for _, run := range background {
+		go func() { completed <- run(ctx) }()
+	}
 	var result error
-	pending := 2
+	pending := 2 + len(background)
 	select {
 	case <-ctx.Done():
 	case result = <-completed:

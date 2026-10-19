@@ -38,3 +38,8 @@ compose-check:
 .PHONY: image-smoke
 image-smoke:
 	IMAGE=$(IMAGE) ./scripts/container-smoke.sh
+
+.PHONY: trmnl-package
+trmnl-package:
+	mkdir -p bin
+	cd integrations/trmnl && python3 -m zipfile -c ../../bin/tado-bridge-trmnl.zip settings.yml full.liquid half_horizontal.liquid half_vertical.liquid quadrant.liquid

@@ -1,6 +1,6 @@
 # tado-bridge
 
-Small, read-only Go CLI and local service for tado° V3/V3+ and X. M1 covers OAuth/discovery, the `read` command provides one-shot measurements, and M2 adds periodic collection, cached JSON, health and readiness. M3 adds optional Prometheus metrics, nonroot containers and CI runtime checks. Outbound integrations remain a later milestone. No thermostat controls are implemented.
+Small, read-only Go CLI and local service for tado° V3/V3+ and X. M1 covers OAuth/discovery, the `read` command provides one-shot measurements, and M2 adds periodic collection, cached JSON, health and readiness. M3 adds optional Prometheus metrics, nonroot containers and CI runtime checks. M4 adds an opt-in TRMNL adapter that publishes selected cached readings. No thermostat controls are implemented.
 
 ## Prerequisites and local use
 
@@ -81,6 +81,32 @@ The effective interval is at least `24h * estimated cycle requests / budget`. Fo
 
 Budget state is in memory and resets on restart; it does not track other integrations or commands/processes, and cannot reset tado's account quota. Choose a budget appropriate to your account and leave headroom for other clients. The service holds the credentials lock for its lifetime, so stop it before running another command against the same file. See [architecture and scheduling](docs/architecture.md) for the exact accounting, retention and shutdown behavior. Keep the listener local; configure authentication and trusted networking explicitly before any remote access.
 
+
+## TRMNL previews
+
+Optional private-plugin layouts use selected cached readings only. The examples below contain **synthetic data**, including missing readings and a valid zero; names and measurements do not come from a real home. Large temperatures, explicit heating indicators and compact secondary values keep the monochrome screens readable.
+
+**Full · 800 × 480 · eight rooms**
+
+![Full TRMNL layout with eight synthetic room cards](docs/images/trmnl/full.png)
+
+<table>
+  <tr>
+    <th>Half horizontal · four rooms</th>
+    <th>Half vertical · four rooms</th>
+    <th>Quadrant · two rooms</th>
+  </tr>
+  <tr>
+    <td><img src="docs/images/trmnl/half_horizontal.png" alt="Horizontal half layout with four synthetic room cards" width="360"></td>
+    <td><img src="docs/images/trmnl/half_vertical.png" alt="Vertical half layout with a two-by-two synthetic room grid" width="200"></td>
+    <td><img src="docs/images/trmnl/quadrant.png" alt="Quadrant layout with two synthetic room cards" width="200"></td>
+  </tr>
+</table>
+
+The smaller layouts follow the configured room order and show how many rooms are visible. Stale collections display an explicit warning. These are local browser renders using TRMNL's stylesheet; final rendering and refresh scheduling should also be checked on your virtual or physical device.
+
+See [private-plugin setup and virtual-device testing](integrations/trmnl/README.md). Use `make trmnl-package` to create an import ZIP. To update an existing plugin, replace its four **Edit Markup** tabs and save; importing again creates another plugin. Publishing real climate data requires `TRMNL_ENABLED=true`, your private webhook and an explicit room selection.
+
 ## Credentials
 
 The credentials path is required explicitly. New parent directories use `0700`; files are written with `0600`, synced and atomically replaced in the same directory. Existing credential files must be regular files without group/other permissions; symlinks are rejected when loading. Choose a directory controlled only by your user, outside the repository, and exclude it from shared backups. Secrets are not encrypted at rest.
@@ -107,4 +133,4 @@ make check
 
 GitHub Actions runs formatting checks, race tests, vet, lint, vulnerability checks and module verification on pushes to `main` and pull requests, using the latest stable Go release. It also cross-compiles Linux and macOS binaries for amd64/arm64 and builds/tests Linux containers for both architectures using synthetic credentials with networking disabled. Images are never pushed. A separate Zizmor workflow audits the Actions configuration. Actions are pinned by commit SHA; Dependabot checks Go modules, Actions and Docker base images weekly, without an update cooldown.
 
-See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. The service remains independent of displays/dashboards. See [container setup](docs/containers.md), [metrics](docs/metrics.md), [security](SECURITY.md) and [release policy](docs/releases.md). The opt-in TRMNL adapter is M4.
+See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. The service remains independent of displays/dashboards. See [container setup](docs/containers.md), [metrics](docs/metrics.md), [security](SECURITY.md) and [release policy](docs/releases.md). See the [TRMNL setup and virtual-device test](integrations/trmnl/README.md) for the opt-in M4 adapter. It sends selected climate data to TRMNL cloud only when enabled.
