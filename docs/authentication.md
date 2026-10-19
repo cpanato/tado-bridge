@@ -36,11 +36,11 @@ Synthetic server observations from the tests:
 - Two-home discovery (V3 only or mixed V3/X): **5 REST requests** (`/me`, then generation and zones/rooms per home).
 - Device login with pending, slow-down and success: **4 OAuth requests** (one initiation and three polls).
 - Successful renewal: **1 OAuth request**.
-- REST failure, including 429: one attempted request at the failing step, without retry.
+- One-shot REST failure, including 429: one attempted request at the failing step, without retry. `serve` adds the bounded retry policy described below.
 
 The CLI prints REST and OAuth attempt counts separately. These are client-side HTTP attempts, not confirmed server-side quota debits; failed network attempts may not reach tado°. Normal successful discovery costs `1 + 2 * number of homes` REST calls and does not fetch zone states. The CLI never probes both generations' discovery routes for the same home. Legacy homes without a generation field use the V3 route, matching PyTado's generation detection convention.
 
-The official quota article currently lists 100 requests/day, or 20,000/day with Auto-Assist/AI Assist. Treat 100/day as a conservative planning ceiling; actual account policy, shared use by other integrations, reset behavior, whether OAuth requests consume that quota and how limits are shared between the V3/X API hosts need live confirmation. M1 has no background polling or daily-budget configuration. A 30-minute schedule with one home would cost 144 REST requests/day before other clients or additional reads; cadence and discovery reuse must be revisited in M2.
+The official quota article currently lists 100 requests/day, or 20,000/day with Auto-Assist/AI Assist. Treat 100/day as a conservative planning ceiling; actual account policy, shared use by other integrations, reset behavior, whether OAuth requests consume that quota and how limits are shared between the V3/X API hosts need live confirmation. A fixed 30-minute schedule with one X home would cost 144 REST requests/day before OAuth and other clients. M2 therefore increases the effective interval to fit the configured rolling budget, reserving refresh capacity as described below.
 
 ## Boundaries and remaining acceptance checks
 
@@ -56,4 +56,8 @@ The new command costs `1 + 2 * number of homes + number of V3 zones` REST calls;
 
 V3/V3+ live discovery and measurements still need verification. Fixtures are synthetic and are not presented as captured production responses. Do not paste raw upstream bodies, user codes or credential files into issues or commits. Inspect quota headers privately if needed; the CLI does not currently expose them.
 
-M1 discovery is unchanged. The separately requested one-shot measurement extension adds normalized CLI snapshots without a service or poller. HTTP service, cached snapshots, polling, retry/budget policy and containers remain later milestones. CI was added separately at the operator's request.
+The M2 local service uses the same read/refresh paths, with a per-request guard counting REST, OAuth and failed network attempts. The guard applies only to `serve`; one-shot commands remain explicitly initiated reads. The process-local rolling 24-hour budget defaults to 90. Request pacing reserves at least one refresh per cycle even when the current access token is valid. Counts reset on process restart; neither this counter nor restarting can reset tado's account-wide quota. Exact quota sharing with other clients/API hosts remains account-dependent.
+
+M2 live acceptance on loopback returned health/readiness 200, rejected an unauthenticated snapshot request with 401 and served eight temperatures to an authenticated request. Repeated snapshot reads kept the same collection timestamp without additional upstream calls. Total upstream attempts were three REST calls plus one OAuth refresh; SIGTERM returned exit code zero. The test displayed only status/count summaries and did not persist snapshots or token values.
+
+The service serializes credential access for its full lifetime. On 429 it honors Retry-After and exhausted RateLimit reset deadlines, with a conservative one-hour fallback if no deadline is supplied. Transient retries count against the same budget. See [M2 architecture](architecture.md) for details. Containers, optional metrics and external integrations remain later milestones.

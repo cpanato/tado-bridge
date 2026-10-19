@@ -1,10 +1,12 @@
 # tado-bridge — Technical Design Document
 
-Status: Proposed | Version: 0.4 | Implementation language: Go
+Status: Proposed | Version: 0.5 | Implementation language: Go
 
 M1 scope amendment: cloud discovery now includes tado° X, explicitly authorized after live verification identified the operator's home as `LINE_X`. Detect generation per home and normalize V3 zones and X rooms into the same provider-neutral discovery model. Local Matter support remains out of scope.
 
 Post-M1 amendment: M1 is merged. A one-shot `tado-bridge read` command is authorized to validate normalized measurements before the M2 service: measured/target temperature, humidity, explicit heating-power activity and available sensor timestamps. It supports V3/V3+ and X, has no polling or HTTP listener, and returns no partial snapshot on failure. Periodic collection, cache and the local HTTP API remain M2 work.
+
+M2 implementation note: `serve` now implements collection, cache and the local API. `POLL_INTERVAL=30m` is a requested minimum; the effective delay grows to fit the rolling request budget, default 90 attempted REST/OAuth calls per 24 hours. One X home reserves four calls per cycle and therefore waits at least 64 minutes with defaults. Budget accounting is process-local and resets on restart; the upstream account quota remains authoritative. See `docs/architecture.md` for scheduling and operational boundaries.
 
 ## 1. Summary
 
@@ -115,7 +117,7 @@ Implement the OAuth device authorization flow required by the current tado° V3/
 
 ## 7. Polling, quota, resilience
 
-- Default polling interval: 30 minutes; configurable, with a conservative lower bound and documentation about request budgeting.
+- Requested default polling interval: 30 minutes; configurable with a 5-minute lower bound. Increase the effective interval according to observed cycle cost and configured budget; do not exceed the budget to satisfy the requested interval.
 - A single polling cycle may involve multiple API calls (home discovery and per-zone state). **Do not assume one poll equals one request.**
 - Discover and record actual upstream call counts, and allow a configurable daily request budget (`TADO_DAILY_REQUEST_BUDGET`, conservative default, subject to verification).
 - On `429`, honor `Retry-After`; on transient errors, use bounded exponential backoff with jitter, without exceeding budget.
@@ -136,6 +138,7 @@ Use environment variables, optionally CLI flags; no config framework required in
 | `TADO_DAILY_REQUEST_BUDGET` | Upstream request cap | documented conservative value |
 | `METRICS_ENABLED` | Enable `/metrics` | `false` |
 | `API_TOKEN` | Optional bearer auth for read API | unset (local-only) |
+| `ALLOW_NETWORK_EXPOSURE` | Explicit acknowledgement for non-loopback binds; also requires `API_TOKEN` | `false` |
 
 Fail fast if binding a non-loopback interface without explicitly acknowledging authentication/network exposure. No sensitive defaults in examples.
 

@@ -38,7 +38,7 @@ func TestLocalCommands(t *testing.T) {
 }
 
 func TestUsage(t *testing.T) {
-	for _, args := range [][]string{{"serve"}, {"auth", "login", "extra"}, {"discover"}, {"read"}, {"read", "extra"}} {
+	for _, args := range [][]string{{"unknown"}, {"auth", "login", "extra"}, {"discover"}, {"read"}, {"read", "extra"}, {"serve", "extra"}} {
 		if err := run(context.Background(), args, "", &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 			t.Fatalf("expected error for %v", args)
 		}
@@ -57,7 +57,7 @@ func run(ctx context.Context, args []string, path string, stdout, stderr io.Writ
 }
 
 func TestHelpDoesNotTouchCredentials(t *testing.T) {
-	for _, args := range [][]string{nil, {"--help"}, {"-h"}, {"auth"}, {"auth", "--help"}, {"auth", "login", "--help"}, {"auth", "status", "-h"}, {"auth", "logout", "--help"}, {"discover", "--help"}, {"read", "--help"}, {"help", "auth", "login"}} {
+	for _, args := range [][]string{nil, {"--help"}, {"-h"}, {"auth"}, {"auth", "--help"}, {"auth", "login", "--help"}, {"auth", "status", "-h"}, {"auth", "logout", "--help"}, {"discover", "--help"}, {"read", "--help"}, {"serve", "--help"}, {"help", "auth", "login"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "not-created", "credentials.json")
 			var out, diagnostics bytes.Buffer
@@ -75,7 +75,7 @@ func TestHelpDoesNotTouchCredentials(t *testing.T) {
 }
 
 func TestInvalidArgumentsHaveNoSideEffects(t *testing.T) {
-	for _, args := range [][]string{{"serve"}, {"auth", "unknown"}, {"auth", "status", "extra"}, {"auth", "logout", "extra"}, {"auth", "login", "extra"}, {"discover", "extra"}, {"read", "extra"}, {"read", "--unknown"}} {
+	for _, args := range [][]string{{"unknown"}, {"auth", "unknown"}, {"auth", "status", "extra"}, {"auth", "logout", "extra"}, {"auth", "login", "extra"}, {"discover", "extra"}, {"read", "extra"}, {"serve", "extra"}, {"read", "--unknown"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "credentials.json")
 			token := credentials.Token{AccessToken: "secret-access", RefreshToken: "secret-refresh", ExpiresAt: time.Now().Add(time.Hour).UTC().Truncate(time.Second)}
@@ -101,7 +101,7 @@ func TestInvalidArgumentsHaveNoSideEffects(t *testing.T) {
 }
 
 func TestOperationalCommandsRequireCredentialsPath(t *testing.T) {
-	for _, args := range [][]string{{"auth", "login"}, {"auth", "status"}, {"auth", "logout"}, {"discover"}, {"read"}} {
+	for _, args := range [][]string{{"auth", "login"}, {"auth", "status"}, {"auth", "logout"}, {"discover"}, {"read"}, {"serve"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var out, diagnostics bytes.Buffer
 			err := run(context.Background(), args, "", &out, &diagnostics)

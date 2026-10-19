@@ -43,6 +43,7 @@ func NewCommand(credentialsFile string) *cobra.Command {
 		auth,
 		app.command("discover", "Print homes and zones as filtered JSON", app.discover),
 		app.command("read", "Collect measurements once and print a JSON snapshot", app.read),
+		app.command("serve", "Collect periodically and serve a cached local JSON API", app.serve),
 	)
 	return root
 }
