@@ -47,7 +47,7 @@ func TestLocalServiceCacheAndShutdown(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			response.Body.Close()
+			_ = response.Body.Close()
 			if response.StatusCode != 200 {
 				t.Fatalf("status=%d", response.StatusCode)
 			}
@@ -68,7 +68,7 @@ func TestLocalServiceCacheAndShutdown(t *testing.T) {
 	client.CloseIdleConnections()
 	connection, err := net.DialTimeout("tcp", address, 100*time.Millisecond)
 	if err == nil {
-		connection.Close()
+		_ = connection.Close()
 		t.Fatal("listener remained open")
 	}
 }
@@ -78,7 +78,7 @@ func TestListenerFailureCancelsCollector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	listener.Close()
+	_ = listener.Close()
 	stopped := make(chan struct{})
 	err = Run(context.Background(), listener, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), func(ctx context.Context) error { <-ctx.Done(); close(stopped); return ctx.Err() })
 	if err == nil {

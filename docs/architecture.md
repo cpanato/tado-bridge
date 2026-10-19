@@ -1,4 +1,4 @@
-# M2 local service
+# Local service and M3 operations
 
 `tado-bridge serve` runs one collector and an HTTP server. The collector owns the tado client, counts requests and refreshes credentials when needed. Provider DTOs are normalized before entering the store. HTTP handlers have access only to the store; consumers cannot trigger upstream reads.
 
@@ -34,10 +34,10 @@ The listener defaults to `127.0.0.1:8080`. HTTP has bounded header size and head
 
 Data remain available through the snapshot endpoint with status 200 when stale. Consumers check `collected_at`; readiness independently reports staleness. A snapshot with no homes or no available climate fields can be cached but is not ready. Collection age is not sensor age: existing `temperature_measured_at` remains null if upstream does not supply a timestamp.
 
-Only GET is accepted. JSON responses use `application/json` and `Cache-Control: no-store`. When `API_TOKEN` is set, the snapshot route requires `Authorization: Bearer <token>`. Authentication uses a constant-time comparison; errors never reflect token values. Health/readiness remain unauthenticated for internal monitoring. Metrics are deferred to M3 and `/metrics` is not exposed.
+Only GET is accepted. JSON responses use `application/json` and `Cache-Control: no-store`. When `API_TOKEN` is set, the snapshot route requires `Authorization: Bearer <token>`. Authentication uses a constant-time comparison; errors never reflect token values. Health/readiness remain unauthenticated for internal monitoring. When `METRICS_ENABLED=true`, `/metrics` uses the same authentication and exports cached climate aggregates and process-local collection/request counters. It never receives a provider client or triggers upstream requests. No home/room names or IDs become labels. See [metrics](metrics.md).
 
 ## Lifecycle and boundaries
 
 SIGINT/SIGTERM cancels waits and upstream HTTP requests, stops accepting HTTP traffic and waits for both the collector and server to exit before releasing the credentials lock. HTTP shutdown has a five-second deadline and closes remaining connections if necessary. A force-killed process can leave the existing lock directory; verify it is not running before removing that lock.
 
-M2 has no outbound integrations. TRMNL, container packaging, releases and deployments are separate milestones. Future adapters consume cached snapshots and never obtain a provider client.
+The service has no outbound integrations. M3 adds [nonroot container packaging](containers.md), runtime checks and operational documentation. TRMNL, releases and deployments require separate authorization. Future adapters consume cached snapshots and never obtain a provider client.

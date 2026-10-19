@@ -151,3 +151,19 @@ func TestCollectorWaitsForWholeCycleBudget(t *testing.T) {
 	}})
 	_ = c.Run(ctx)
 }
+
+func TestCollectionObserverIncludesCacheFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	budget, _ := NewBudget(90, nil)
+	observed := false
+	c, _ := New(func(context.Context) (domain.Snapshot, int, error) { return domain.Snapshot{}, 1, nil }, &store.Store{}, Options{
+		Interval: time.Minute, Budget: budget,
+		ObserveCollection: func(err error) { observed = err != nil },
+		Wait:              func(ctx context.Context, _ time.Duration) error { cancel(); return ctx.Err() },
+	})
+	_ = c.Run(ctx)
+	if !observed {
+		t.Fatal("invalid cache replacement was counted as a successful collection")
+	}
+}

@@ -107,7 +107,7 @@ func (c *Client) request(ctx context.Context, method, endpoint, bearer string, f
 		}
 		return &transportError{}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	retryAt := retryDeadline(resp.Header, c.now())
 	if resp.StatusCode == http.StatusTooManyRequests {
 		if retryAt.IsZero() {

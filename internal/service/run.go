@@ -13,7 +13,7 @@ import (
 func Run(ctx context.Context, listener net.Listener, handler http.Handler, collect func(context.Context) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,

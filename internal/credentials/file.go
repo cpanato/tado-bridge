@@ -47,8 +47,8 @@ func Save(path string, token Token) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
+	defer func() { _ = os.Remove(f.Name()) }()
+	defer func() { _ = f.Close() }()
 	if err := json.NewEncoder(f).Encode(token); err != nil {
 		return err
 	}

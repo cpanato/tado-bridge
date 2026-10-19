@@ -41,6 +41,7 @@ func NewCommand(credentialsFile string) *cobra.Command {
 	)
 	root.AddCommand(
 		auth,
+		healthcheckCommand(),
 		app.command("discover", "Print homes and zones as filtered JSON", app.discover),
 		app.command("read", "Collect measurements once and print a JSON snapshot", app.read),
 		app.command("serve", "Collect periodically and serve a cached local JSON API", app.serve),
@@ -70,7 +71,7 @@ func (app application) command(use, short string, action func(*cobra.Command, *t
 			defer unlock()
 			client := tado.New()
 			defer func() {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Requests: api=%d oauth=%d\n", client.APIRequests, client.OAuthRequests)
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Requests: api=%d oauth=%d\n", client.APIRequests, client.OAuthRequests)
 			}()
 			return action(cmd, client)
 		},

@@ -35,7 +35,8 @@ func TestConfig(t *testing.T) {
 		{"large budget", map[string]string{"TADO_DAILY_REQUEST_BUDGET": "1000001"}, false},
 		{"invalid bool", map[string]string{"ALLOW_NETWORK_EXPOSURE": "maybe"}, false},
 		{"token whitespace", map[string]string{"API_TOKEN": "secret value"}, false},
-		{"metrics deferred", map[string]string{"METRICS_ENABLED": "true"}, false},
+		{"metrics enabled", map[string]string{"METRICS_ENABLED": "true"}, true},
+		{"invalid metrics boolean", map[string]string{"METRICS_ENABLED": "invalid"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := LoadConfig(func(name string) string { return tc.env[name] })
