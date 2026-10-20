@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+    branches:
+      - main
 
 permissions: {}
 
@@ -17,17 +19,21 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     permissions:
       contents: read
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version-file: go.mod
           check-latest: true
           cache: false
+
       - name: Check Go formatting
         run: |
           unformatted=$(gofmt -l cmd internal)
@@ -35,14 +41,19 @@ jobs:
             printf '%s\n' "$unformatted"
             exit 1
           fi
+
       - name: Test Go packages
         run: go test -race -count=1 ./...
+
       - name: Vet Go packages
         run: go vet ./...
+
       - name: Verify Go modules
         run: go mod verify
+
       - name: Verify module declarations
         run: go mod tidy -diff
+
       - name: Check known vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
@@ -50,85 +61,132 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     permissions:
       contents: read
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version-file: go.mod
           check-latest: true
           cache: false
+
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.15.0
+          version: v2.15
           skip-cache: true
 
-  container:
-    name: Container linux ${{ matrix.arch }}
+  packaging:
+    name: GoReleaser and container checks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [amd64, arm64]
-    env:
-      DOCKER_BUILD_SUMMARY: "false"
-      DOCKER_BUILD_RECORD_UPLOAD: "false"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
-          platforms: arm64
-          cache-image: false
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          cache-binary: false
-      - name: Build image locally
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: linux/${{ matrix.arch }}
-          load: true
-          push: false
-          tags: tado-bridge:ci-${{ matrix.arch }}
-          provenance: false
-          sbom: false
-      - name: Test nonroot runtime and shutdown without upstream access
-        env:
-          IMAGE: tado-bridge:ci-${{ matrix.arch }}
-        run: ./scripts/container-smoke.sh
+    timeout-minutes: 30
 
-  cross-build:
-    name: Build ${{ matrix.goos }} ${{ matrix.goarch }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        goos: [linux, darwin]
-        goarch: [amd64, arm64]
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version-file: go.mod
           check-latest: true
           cache: false
-      - name: Cross-compile CLI
+
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: latest
+          args: check
+
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: latest
+          args: release --snapshot --clean --skip=publish,sign
+
+      - name: Test snapshot image without upstream access
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-        run: go build -trimpath -o "bin/tado-bridge-${GOOS}-${GOARCH}" ./cmd/tado-bridge
+          IMAGE: ko.local:snapshot
+        run: ./scripts/container-smoke.sh
+
+      - name: Test Compose without networking or published ports
+        env:
+          IMAGE: ko.local:snapshot
+        run: ./scripts/compose-smoke.sh
+
+      - name: Export snapshot images for chart tests
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tado-bridge-ci-images"
+          docker image save ko.local:snapshot ko.local:fixture | gzip > "${RUNNER_TEMP}/tado-bridge-ci-images/images.tar.gz"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: chart-test-images
+          path: ${{ runner.temp }}/tado-bridge-ci-images/images.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  helm:
+    name: Helm chart integration
+    needs: packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: chart-test-images
+          path: ${{ runner.temp }}/tado-bridge-ci-images
+
+      - name: Load GoReleaser snapshot images
+        run: docker image load --input "${RUNNER_TEMP}/tado-bridge-ci-images/images.tar.gz"
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.1
+
+      - run: make helm-check helm-package
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.x'
+          check-latest: true
+
+      - uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510 # v2.9.0
+
+      - name: Lint chart with chart-testing
+        run: ct lint --config .github/ct.yaml
+
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: v0.33.0
+          kubectl_version: v1.37.1
+          cluster_name: tado-bridge-ci
+          config: .github/helm/kind.yaml
+          wait: 120s
+
+      - name: Install and exercise chart against synthetic HTTPS tado APIs
+        env:
+          KIND_CLUSTER_NAME: tado-bridge-ci
+        run: ./scripts/chart-integration.sh

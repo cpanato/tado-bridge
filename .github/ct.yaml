@@ -1,0 +1,13 @@
+chart-dirs:
+  - charts
+charts:
+  - charts/tado-bridge
+namespace: tado-bridge-ci
+release-name: tado-bridge
+release-label: app.kubernetes.io/instance
+check-version-increment: false
+validate-maintainers: false
+helm-extra-args: --timeout 3m
+# Static scenarios come from the chart's ci/*-values.yaml; only the fixture's
+# dynamically allocated Service IP is supplied by this generated overlay.
+helm-extra-set-args: --values .local/helm-ci-values.yaml

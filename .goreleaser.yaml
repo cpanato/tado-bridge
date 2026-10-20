@@ -1,0 +1,72 @@
+version: 2
+project_name: tado-bridge
+builds:
+  - id: binary
+    main: ./cmd/tado-bridge
+    binary: tado-bridge
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+  - id: fixture
+    main: ./internal/testutil/cmd/tadofake
+    binary: tadofake
+    skip: "{{ not .IsSnapshot }}"
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: [-s -w]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+
+kos:
+  - id: container
+    build: binary
+    main: ./cmd/tado-bridge
+    base_image: cgr.dev/chainguard/static:latest@sha256:fe55470f22d3259488d9d3739168d8f04da67755f0b69382bc26eda4a7d3d327
+    user: '65532:65532'
+    repositories:
+      - ko.local/tado-bridge
+    local_domain: ko.local
+    platforms: [linux/amd64, linux/arm64]
+    tags: [snapshot]
+    bare: true
+    sbom: spdx
+    labels:
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.source: https://github.com/cpanato/tado-bridge
+      org.opencontainers.image.licenses: Apache-2.0
+  - id: fixture
+    build: fixture
+    main: ./internal/testutil/cmd/tadofake
+    disable: "{{ not .IsSnapshot }}"
+    base_image: cgr.dev/chainguard/static:latest@sha256:fe55470f22d3259488d9d3739168d8f04da67755f0b69382bc26eda4a7d3d327
+    user: '65532:65532'
+    repositories: [ko.local/tadofake]
+    local_domain: ko.local
+    platforms: [linux/amd64, linux/arm64]
+    tags: [fixture]
+    bare: true
+    sbom: spdx
+    labels:
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.description: Synthetic tado API for tests only
+
+archives:
+  - ids: [binary]
+    formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+      - README.md
+checksum:
+  name_template: checksums.txt
+snapshot:
+  version_template: '0.0.0-{{ .ShortCommit }}'
+changelog:
+  disable: true
+release:
+  disable: true

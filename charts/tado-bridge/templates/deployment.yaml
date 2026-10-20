@@ -1,0 +1,139 @@
+{{- if and .Values.trmnl.enabled (empty .Values.trmnl.rooms) -}}
+{{- fail "trmnl.rooms must explicitly select rooms when TRMNL is enabled" -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tado-bridge.fullname" . }}
+  labels:
+    {{- include "tado-bridge.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tado-bridge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tado-bridge.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tado-bridge
+          image: {{ include "tado-bridge.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [serve]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            {{- if .Values.tls.existingCASecret }}
+            - name: SSL_CERT_FILE
+              value: /etc/tado-bridge-ca/ca.crt
+            {{- end }}
+            - name: LISTEN_ADDR
+              value: "0.0.0.0:8080"
+            - name: ALLOW_NETWORK_EXPOSURE
+              value: "true"
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret | quote }}
+                  key: {{ .Values.secrets.apiTokenKey | quote }}
+            - name: TADO_CREDENTIALS_FILE
+              value: /var/lib/tado-bridge/credentials.json
+            - name: POLL_INTERVAL
+              value: {{ .Values.config.pollInterval | quote }}
+            - name: MAX_SNAPSHOT_AGE
+              value: {{ .Values.config.maxSnapshotAge | quote }}
+            - name: TADO_DAILY_REQUEST_BUDGET
+              value: {{ .Values.config.dailyRequestBudget | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.config.metricsEnabled | quote }}
+            - name: TRMNL_ENABLED
+              value: {{ .Values.trmnl.enabled | quote }}
+            {{- if .Values.trmnl.enabled }}
+            - name: TRMNL_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret | quote }}
+                  key: {{ .Values.secrets.trmnlWebhookKey | quote }}
+            - name: TRMNL_INTERVAL
+              value: {{ .Values.trmnl.interval | quote }}
+            - name: TRMNL_ROOMS
+              value: {{ .Values.trmnl.rooms | toJson | quote }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: credentials
+              mountPath: /var/lib/tado-bridge
+            {{- if .Values.tls.existingCASecret }}
+            - name: custom-ca
+              mountPath: /etc/tado-bridge-ca
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.tls.existingCASecret }}
+        - name: custom-ca
+          secret:
+            secretName: {{ .Values.tls.existingCASecret | quote }}
+            items:
+              - key: {{ .Values.tls.caKey | quote }}
+                path: ca.crt
+        {{- end }}
+        - name: credentials
+          persistentVolumeClaim:
+            claimName: {{ .Values.credentials.existingClaim | quote }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

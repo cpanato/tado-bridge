@@ -1,0 +1,16 @@
+{{- if .Values.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tado-bridge.fullname" . }}
+  labels:
+    {{- include "tado-bridge.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+  selector:
+    {{- include "tado-bridge.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -1,6 +1,6 @@
 # tado-bridge — Technical Design Document
 
-Status: M3 merged; M4 implementation, live acceptance pending | Version: 0.7 | Implementation language: Go
+Status: M1–M4 merged and accepted; local packaging extension implemented | Version: 0.8 | Implementation language: Go
 
 M1 scope amendment: cloud discovery now includes tado° X, explicitly authorized after live verification identified the operator's home as `LINE_X`. Detect generation per home and normalize V3 zones and X rooms into the same provider-neutral discovery model. Local Matter support remains out of scope.
 
@@ -11,6 +11,8 @@ M2 implementation note: `serve` now implements collection, cache and the local A
 M3 implementation note: optional Prometheus metrics use cached aggregates without home/zone labels. Distroless nonroot containers support Linux/amd64 and Linux/arm64, with read-only root filesystems and a writable private credentials directory for token rotation. CI builds and tests images locally without publishing. See `docs/containers.md`, `docs/metrics.md`, `SECURITY.md` and `docs/releases.md`. TRMNL remains M4.
 
 M4 implementation note: the disabled-by-default TRMNL adapter publishes only explicitly selected cached rooms to an official private-plugin HTTPS webhook. Templates and a synthetic eight-room fixture support manual browser/virtual-device acceptance; no real webhook is called by tests. See `integrations/trmnl/README.md`.
+
+Post-M4 acceptance and packaging note: the operator confirmed the real-data TRMNL refresh. Local packaging now uses digest-pinned Chainguard static with ko, GoReleaser snapshots and a private single-replica Helm chart. Go is updated to 1.27.3. Snapshots/images/charts are built and validated locally without publishing or external deployment. See `docs/releases.md`, `docs/containers.md` and `charts/tado-bridge/README.md`.
 
 ## 1. Summary
 
@@ -160,7 +162,8 @@ tado-bridge/
   docs/architecture.md
   docs/authentication.md
   examples/
-  Dockerfile
+  .ko.yaml
+  .goreleaser.yaml
   compose.yaml
   .gitignore
   .golangci.yml                 # only if useful
@@ -188,7 +191,7 @@ Keep package boundaries pragmatic. Prefer Go standard library; Cobra is explicit
 - Fake clock or injectable time source for deterministic quota and staleness tests.
 - `go test ./...`, `go vet ./...`, `go test -race ./...` in CI where feasible.
 - Integration tests against real tado° credentials are opt-in only, never CI-required.
-- Multi-stage Docker build with nonroot runtime and amd64/arm64 build instructions.
+- ko-based container builds with nonroot runtime and amd64/arm64 build instructions.
 
 ## 12. Implementation milestones and acceptance criteria
 
@@ -254,3 +257,5 @@ integrations:
 Use https://github.com/cpanato/pr-inbox as a **reference to inspect**, not a blindly copied template. Verify its current workflows, Go tooling and security controls before choosing patterns. Use the latest supported patched stable Go toolchain verified at implementation time; pin CI actions to full commit SHAs; minimum `GITHUB_TOKEN` permissions; avoid `pull_request_target` for untrusted code; use `go test ./...`, `go test -race ./...`, `go vet ./...`, lint and `govulncheck`; Dependabot for Go modules and GitHub Actions. Build containers in CI only without pushing. Docker runs nonroot with read-only filesystem where feasible; localhost binding and no automatic public ingress. Any tags, releases, registries, deploys, outbound telemetry or publish workflows require explicit operator authorization. Keep secrets out of logs, workflow outputs, examples and artifacts. Add `SECURITY.md`, Apache-2.0 LICENSE, Makefile, and clear release policy.
 
 **Codex handoff update:** implement M1 first. Do not implement the TRMNL adapter until the core API is stable; then implement it as M4 without changing the domain model for display requirements.
+
+**Packaging validation:** the operator authorized disposable Kind deployment tests using chart-testing and synthetic tado HTTPS APIs. CI reuses GoReleaser snapshot images for the application and a reusable test-only handler/tool; it verifies readiness, V3/X collection and persisted OAuth rotation across restart. This does not authorize publishing images/releases or deploying to an external cluster.
