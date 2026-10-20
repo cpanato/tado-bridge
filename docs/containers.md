@@ -1,24 +1,27 @@
 # Local container operation
 
-The Dockerfile builds a static Linux binary with Go 1.27.2 and runs it in the supported distroless Debian 13 nonroot image. Both bases are pinned by multi-architecture digest. Their sources were checked against [Docker's official Go image metadata](https://github.com/docker-library/official-images/blob/master/library/golang) and [distroless's supported images](https://github.com/GoogleContainerTools/distroless). Only Go source, module files and LICENSE enter the build context; credentials, `.git`, local binaries and documentation are excluded by the allowlist in `.dockerignore`.
+The default local build uses ko 0.19.1 with Go 1.27.3 and the public [Chainguard static image](https://images.chainguard.dev/directory/image/static/overview), pinned as `cgr.dev/chainguard/static:latest@sha256:...`. Both Linux amd64/arm64 are supported. The image runs as UID/GID 65532:65532. GoReleaser snapshots build binaries and images through its native ko integration; see [build tooling and release policy](releases.md). Images are built from the Go binary with ko; no Docker build context is used.
 
 ## Compose
 
 Run these commands as your regular nonroot user. The example expects `credentials.json` in an existing private directory. If you already logged in with this path, reuse it and stop the host service before starting the container.
 
 ```sh
-make build
 export TADO_CREDENTIALS_FILE="$HOME/.config/tado-bridge/credentials.json"
-./bin/tado-bridge auth login
+# Only if you have not logged in yet, with the native service stopped:
+# ./bin/tado-bridge auth login
 
 export TADO_CREDENTIALS_DIR="$HOME/.config/tado-bridge"
 export TADO_BRIDGE_UID="$(id -u)"
 export TADO_BRIDGE_GID="$(id -g)"
 export API_TOKEN="$(openssl rand -hex 32)"
 
-docker compose config --quiet
-docker compose up --build
+make compose-up
 ```
+
+`make compose-up` validates configuration, builds the image with ko and then starts Compose. `make compose-down` stops it. To run these steps separately, use `make image`, `docker compose config --quiet` and `docker compose up`, in that order.
+
+Compose consumes the already built `ko.local/tado-bridge:local` image, passes `serve` explicitly and never pulls an image automatically. `TADO_BRIDGE_IMAGE` can select a different image already present locally. Stop the native service before using its credential directory in Compose, and do not start a second instance just to test packaging while the day-long native test is running. Local runtime tests use a separate synthetic credentials directory instead.
 
 Use the same API_TOKEN in your clients; keep it private. It is passed only as runtime configuration, never as a build argument or image layer. Compose config output can contain environment values, so use `--quiet` when validating it and do not paste expanded configuration into issues.
 
@@ -26,16 +29,23 @@ The root filesystem is read-only. The whole credentials directory is mounted rea
 
 Inside the container, LISTEN_ADDR is `0.0.0.0:8080` and the network acknowledgement is explicit, but the host port is published only on `127.0.0.1:8080`. API_TOKEN is required, including for metrics when enabled. No public interface, registry or deployment is configured. Collection and quota settings are the same as the standalone binary. Set METRICS_ENABLED=true before startup to enable metrics.
 
-The image healthcheck calls `/tado-bridge healthcheck`, which checks only `/healthz` with a two-second timeout and does not load credentials or call tado. A healthy container may still have stale data or an upstream failure; use `/readyz` to check collection readiness. Stop with Ctrl-C or `docker compose down`; Compose allows ten seconds for graceful shutdown.
+The Compose healthcheck calls `/ko-app/tado-bridge healthcheck`, which checks only `/healthz` with a two-second timeout and does not load credentials or call tado. A healthy container may still have stale data or an upstream failure; use `/readyz` to check collection readiness. Stop with Ctrl-C or `docker compose down`; Compose allows ten seconds for graceful shutdown.
 
 ## Local image checks
+
+See [smoke-check scripts](../scripts/README.md) for prerequisites, what each check covers, temporary resource cleanup and troubleshooting. They use prebuilt images and are not required for normal operation.
 
 ```sh
 make image
 make image-smoke
+make compose-smoke
 make image-multiarch
 ```
 
-`image` builds `tado-bridge:local` without pushing. `image-smoke` verifies the declared nonroot user and starts the service with a read-only root, a temporary writable credentials directory and **runtime networking disabled**. It uses synthetic tokens, checks local liveness, stops the container and verifies exit code/lock cleanup. It does not publish ports or contact tado. Run it as a nonroot user so bind-mount ownership matches the tested nonroot runtime.
+`image` builds `ko.local/tado-bridge:local` with ko without pushing. `image-smoke` verifies the declared nonroot user and starts the service with a read-only root, a temporary writable credentials directory and **runtime networking disabled**. It uses synthetic tokens, checks local liveness, stops the container and verifies exit code/lock cleanup. It does not publish ports or contact tado. Run it as a nonroot user so bind-mount ownership matches the tested nonroot runtime.
 
-`image-multiarch` cross-builds Linux amd64/arm64 to BuildKit's local cache only. It neither loads a release image nor publishes anything. CI separately builds and loads each architecture and runs the same smoke script, using QEMU where needed. Image build records/artifacts are not uploaded. Docker-base updates are proposed by Dependabot for review.
+`compose-smoke` starts an isolated Compose project with synthetic credentials, no network and no published ports. It checks the configured healthcheck and lock cleanup on shutdown without using your real service.
+
+`image-multiarch` writes Linux amd64/arm64 to the ignored `dist/oci` layout with pushing disabled. CI builds binaries and both Linux image variants through one GoReleaser snapshot job, then runs the container and Compose smoke scripts on the snapshot loaded into its local daemon. Runtime CI coverage is the loaded amd64 image on the Ubuntu runner; both architectures are built, and arm64 runtime was also validated locally. Build artifacts are not uploaded. Go-module/Action updates are proposed by Dependabot; review and update the public base digest together in `.ko.yaml` and `.goreleaser.yaml`.
+
+For Kubernetes packaging, see the [Helm chart](../charts/tado-bridge/README.md). It requires a preinitialized writable credentials PVC and existing token Secret, fixes one replica with Recreate updates and exposes only a ClusterIP Service. No cluster deployment is performed by the local build commands.

@@ -2,3 +2,5 @@
 /.local/
 /credentials*.json
 *.test
+
+/dist/

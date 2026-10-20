@@ -1,0 +1,10 @@
+# Discovered automatically by chart-testing for lint/install.
+# Synthetic resources are provisioned by scripts/chart-integration.sh.
+image:
+  repository: ko.local
+  tag: snapshot
+  pullPolicy: Never
+config:
+  metricsEnabled: true
+tls:
+  existingCASecret: tado-fixture-tls

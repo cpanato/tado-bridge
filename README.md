@@ -4,7 +4,7 @@ Small, read-only Go CLI and local service for tado° V3/V3+ and X. M1 covers OAu
 
 ## Prerequisites and local use
 
-Go 1.27.2 or newer, a tado° account, internet access and a browser for authorization. The CLI uses [Cobra](https://github.com/spf13/cobra); provider and credential handling use the Go standard library. Both V3/V3+ and X cloud discovery are supported; local Matter access is outside this milestone.
+Go 1.27.3 or newer, a tado° account, internet access and a browser for authorization. The CLI uses [Cobra](https://github.com/spf13/cobra); provider and credential handling use the Go standard library. Both V3/V3+ and X cloud discovery are supported; local Matter access is outside this milestone.
 
 Use the latest stable Go release and the latest stable versions of any dependencies when adding or updating them; verify current upstream releases and run the project checks after upgrades.
 
@@ -82,6 +82,12 @@ The effective interval is at least `24h * estimated cycle requests / budget`. Fo
 Budget state is in memory and resets on restart; it does not track other integrations or commands/processes, and cannot reset tado's account quota. Choose a budget appropriate to your account and leave headroom for other clients. The service holds the credentials lock for its lifetime, so stop it before running another command against the same file. See [architecture and scheduling](docs/architecture.md) for the exact accounting, retention and shutdown behavior. Keep the listener local; configure authentication and trusted networking explicitly before any remote access.
 
 
+## Containers and Helm
+
+After configuring credentials and the API token, use `make compose-up` to build the local Chainguard-based image with ko and then start Compose. See [Compose setup](docs/containers.md); `make compose-down` stops it. `make release-snapshot` uses GoReleaser to build Linux/macOS binaries and daemon-local container snapshots. No registry image or release is published.
+
+The [Helm chart](charts/tado-bridge/README.md) packages one collector with a writable credentials PVC, existing token Secret and ClusterIP-only Service. `make helm-check helm-package` validates/packages it without accessing a cluster. See [build versions and release policy](docs/releases.md) for prerequisites and the multi-platform OCI target.
+
 ## TRMNL previews
 
 Optional private-plugin layouts use selected cached readings only. The examples below contain **synthetic data**, including missing readings and a valid zero; names and measurements do not come from a real home. Large temperatures, explicit heating indicators and compact secondary values keep the monochrome screens readable.
@@ -131,6 +137,6 @@ make check
 
 `make check` also requires golangci-lint v2.15.0. Tests use synthetic fixtures and local HTTP servers; no real credentials or upstream calls are required. If your environment restricts the default Go build cache, set `GOCACHE` to a writable directory.
 
-GitHub Actions runs formatting checks, race tests, vet, lint, vulnerability checks and module verification on pushes to `main` and pull requests, using the latest stable Go release. It also cross-compiles Linux and macOS binaries for amd64/arm64 and builds/tests Linux containers for both architectures using synthetic credentials with networking disabled. Images are never pushed. A separate Zizmor workflow audits the Actions configuration. Actions are pinned by commit SHA; Dependabot checks Go modules, Actions and Docker base images weekly, without an update cooldown.
+The [packaging integration scripts](scripts/README.md) check prebuilt images, Compose and chart deployments with synthetic data; see their prerequisites, isolation and troubleshooting instructions.
 
 See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. The service remains independent of displays/dashboards. See [container setup](docs/containers.md), [metrics](docs/metrics.md), [security](SECURITY.md) and [release policy](docs/releases.md). See the [TRMNL setup and virtual-device test](integrations/trmnl/README.md) for the opt-in M4 adapter. It sends selected climate data to TRMNL cloud only when enabled.

@@ -1,0 +1,50 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# Local image only: no registry release is assumed to exist.
+image:
+  repository: ko.local/tado-bridge
+  tag: local
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Provision these separately. Never put OAuth credentials or bearer secrets here.
+credentials:
+  existingClaim: tado-bridge-credentials
+secrets:
+  existingSecret: tado-bridge-secrets
+  apiTokenKey: api-token
+  trmnlWebhookKey: trmnl-webhook-url
+
+service:
+  enabled: true
+  port: 8080
+
+config:
+  pollInterval: 30m
+  maxSnapshotAge: 2h
+  dailyRequestBudget: 90
+  metricsEnabled: false
+
+trmnl:
+  enabled: false
+  interval: 30m
+  rooms: []
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Optional private CA bundle and standard Kubernetes host overrides.
+tls:
+  existingCASecret: ""
+  caKey: ca.crt
+hostAliases: []
