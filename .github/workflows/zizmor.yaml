@@ -10,6 +10,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: zizmor-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   zizmor:
     name: zizmor
@@ -17,8 +21,9 @@ jobs:
     timeout-minutes: 15
 
     permissions:
-      contents: read
-      actions: read
+      contents: read # Check out the repository for analysis.
+      actions: read # Read workflow metadata for the SARIF upload.
+      security-events: write # Upload zizmor SARIF results to GitHub Code Scanning.
 
     steps:
       - name: Checkout
