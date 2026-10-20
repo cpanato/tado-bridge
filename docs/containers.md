@@ -1,6 +1,6 @@
 # Local container operation
 
-The default local build uses ko 0.19.1 with Go 1.27.3 and the public [Chainguard static image](https://images.chainguard.dev/directory/image/static/overview), pinned as `cgr.dev/chainguard/static:latest@sha256:...`. Both Linux amd64/arm64 are supported. The image runs as UID/GID 65532:65532. GoReleaser snapshots build binaries and images through its native ko integration; see [build tooling and release policy](releases.md). Images are built from the Go binary with ko; no Docker build context is used.
+The default local build uses ko 0.19.1 with Go 1.27.3 and the public [Chainguard static image](https://images.chainguard.dev/directory/image/static/overview), referenced as `cgr.dev/chainguard/static:latest` and resolved at build time. Both Linux amd64/arm64 are supported. The image runs as UID/GID 65532:65532. GoReleaser snapshots build binaries and images through its native ko integration; see [build tooling and release policy](releases.md). Images are built from the Go binary with ko; no Docker build context is used.
 
 ## Compose
 
@@ -46,6 +46,6 @@ make image-multiarch
 
 `compose-smoke` starts an isolated Compose project with synthetic credentials, no network and no published ports. It checks the configured healthcheck and lock cleanup on shutdown without using your real service.
 
-`image-multiarch` writes Linux amd64/arm64 to the ignored `dist/oci` layout with pushing disabled. CI builds binaries and both Linux image variants through one GoReleaser snapshot job, then runs the container and Compose smoke scripts on the snapshot loaded into its local daemon. Runtime CI coverage is the loaded amd64 image on the Ubuntu runner; both architectures are built, and arm64 runtime was also validated locally. Only the two snapshot images are transferred as a one-day workflow artifact to the separate Helm integration job; product archives are not uploaded. Go-module/Action updates are proposed by Dependabot; review and update the public base digest together in `.ko.yaml` and `.goreleaser.yaml`.
+`image-multiarch` writes Linux amd64/arm64 to the ignored `dist/oci` layout with pushing disabled. CI builds binaries and both Linux image variants through one GoReleaser snapshot job, then runs the container and Compose smoke scripts on the snapshot loaded into its local daemon. Runtime CI coverage is the loaded amd64 image on the Ubuntu runner; both architectures are built, and arm64 runtime was also validated locally. Only the two snapshot images are transferred as a one-day workflow artifact to the separate Helm integration job; product archives are not uploaded. Go-module/Action updates are proposed by Dependabot; keep the public base reference aligned in `.ko.yaml` and `.goreleaser.yaml`.
 
 For Kubernetes packaging, see the [Helm chart](../charts/tado-bridge/README.md). It requires a preinitialized writable credentials PVC and existing token Secret, fixes one replica with Recreate updates and exposes only a ClusterIP Service. No cluster deployment is performed by the local build commands.

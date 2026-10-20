@@ -26,7 +26,7 @@ kos:
   - id: container
     build: binary
     main: ./cmd/tado-bridge
-    base_image: cgr.dev/chainguard/static:latest@sha256:fe55470f22d3259488d9d3739168d8f04da67755f0b69382bc26eda4a7d3d327
+    base_image: cgr.dev/chainguard/static:latest
     user: '65532:65532'
     repositories:
       - ko.local/tado-bridge
@@ -43,7 +43,7 @@ kos:
     build: fixture
     main: ./internal/testutil/cmd/tadofake
     disable: "{{ not .IsSnapshot }}"
-    base_image: cgr.dev/chainguard/static:latest@sha256:fe55470f22d3259488d9d3739168d8f04da67755f0b69382bc26eda4a7d3d327
+    base_image: cgr.dev/chainguard/static:latest
     user: '65532:65532'
     repositories: [ko.local/tadofake]
     local_domain: ko.local
@@ -67,6 +67,8 @@ checksum:
 snapshot:
   version_template: '0.0.0-{{ .ShortCommit }}'
 changelog:
-  disable: true
+  use: github-native
 release:
-  disable: true
+  github:
+    owner: cpanato
+    name: tado-bridge

@@ -1,20 +1,23 @@
 version: 2
 updates:
-  # Offer latest stable updates without a cooldown, per project policy.
-  - package-ecosystem: gomod # zizmor: ignore[dependabot-cooldown]
+  - package-ecosystem: gomod
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       routine-updates:
         update-types:
           - minor
           - patch
-  - package-ecosystem: github-actions # zizmor: ignore[dependabot-cooldown]
+  - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       routine-updates:
