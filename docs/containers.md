@@ -27,7 +27,7 @@ Use the same API_TOKEN in your clients; keep it private. It is passed only as ru
 
 The root filesystem is read-only. The whole credentials directory is mounted read/write, allowing atomic refresh-token rotation and locking. Do not mount only the file, copy the token into the image, or share it with another running process. Matching the host UID/GID preserves existing `0600` permissions and lets the container rotate tokens. The image itself defaults to nonroot UID/GID 65532 when no Compose override is supplied.
 
-Inside the container, LISTEN_ADDR is `0.0.0.0:8080` and the network acknowledgement is explicit, but the host port is published only on `127.0.0.1:8080`. API_TOKEN is required, including for metrics when enabled. No public interface, registry or deployment is configured. Collection and quota settings are the same as the standalone binary. Set METRICS_ENABLED=true before startup to enable metrics.
+Inside the container, LISTEN_ADDR is `0.0.0.0:8080` and the network acknowledgement is explicit, but the host port is published only on `127.0.0.1:8080`. API_TOKEN is required, including for metrics when enabled. Compose publishes no public interface and never pushes to a registry or deploys to a cluster. Collection and quota settings are the same as the standalone binary. Set METRICS_ENABLED=true before startup to enable metrics.
 
 The Compose healthcheck calls `/ko-app/tado-bridge healthcheck`, which checks only `/healthz` with a two-second timeout and does not load credentials or call tado. A healthy container may still have stale data or an upstream failure; use `/readyz` to check collection readiness. Stop with Ctrl-C or `docker compose down`; Compose allows ten seconds for graceful shutdown.
 
@@ -47,5 +47,7 @@ make image-multiarch
 `compose-smoke` starts an isolated Compose project with synthetic credentials, no network and no published ports. It checks the configured healthcheck and lock cleanup on shutdown without using your real service.
 
 `image-multiarch` writes Linux amd64/arm64 to the ignored `dist/oci` layout with pushing disabled. CI builds binaries and both Linux image variants through one GoReleaser snapshot job, then runs the container and Compose smoke scripts on the snapshot loaded into its local daemon. Runtime CI coverage is the loaded amd64 image on the Ubuntu runner; both architectures are built, and arm64 runtime was also validated locally. Only the two snapshot images are transferred as a one-day workflow artifact to the separate Helm integration job; product archives are not uploaded. Go-module/Action updates are proposed by Dependabot; keep the public base reference aligned in `.ko.yaml` and `.goreleaser.yaml`.
+
+The separate version-tag release workflow publishes `ghcr.io/cpanato/tado-bridge:<tag>` for Linux amd64/arm64; stable versions also update `latest`. See [release operation](releases.md). Compose defaults remain local, and its `pull_policy: never` requires an image to be built or pulled separately before use.
 
 For Kubernetes packaging, see the [Helm chart](../charts/tado-bridge/README.md). It requires a preinitialized writable credentials PVC and existing token Secret, fixes one replica with Recreate updates and exposes only a ClusterIP Service. No cluster deployment is performed by the local build commands.

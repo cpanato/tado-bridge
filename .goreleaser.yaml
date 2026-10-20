@@ -29,10 +29,12 @@ kos:
     base_image: cgr.dev/chainguard/static:latest
     user: '65532:65532'
     repositories:
-      - ko.local/tado-bridge
+      - ghcr.io/cpanato/tado-bridge
     local_domain: ko.local
     platforms: [linux/amd64, linux/arm64]
-    tags: [snapshot]
+    tags:
+      - '{{ if .IsSnapshot }}snapshot{{ else }}{{ .Tag }}{{ end }}'
+      - '{{ if and (not .IsSnapshot) (not .Prerelease) }}latest{{ end }}'
     bare: true
     sbom: spdx
     labels:
@@ -72,3 +74,4 @@ release:
   github:
     owner: cpanato
     name: tado-bridge
+  prerelease: auto

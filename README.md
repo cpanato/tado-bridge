@@ -84,7 +84,7 @@ Budget state is in memory and resets on restart; it does not track other integra
 
 ## Containers and Helm
 
-After configuring credentials and the API token, use `make compose-up` to build the local Chainguard-based image with ko and then start Compose. See [Compose setup](docs/containers.md); `make compose-down` stops it. `make release-snapshot` uses GoReleaser to build Linux/macOS binaries and daemon-local container snapshots. No registry image or release is published.
+After configuring credentials and the API token, use `make compose-up` to build the local Chainguard-based image with ko and then start Compose. See [Compose setup](docs/containers.md); `make compose-down` stops it. `make release-snapshot` uses GoReleaser to build Linux/macOS binaries and daemon-local container snapshots. These local commands do not publish. The separate version-tag workflow publishes binaries and the GHCR image with native GitHub release notes; see [release operation](docs/releases.md).
 
 The [Helm chart](charts/tado-bridge/README.md) packages one collector with a writable credentials PVC, existing token Secret and ClusterIP-only Service. `make helm-check helm-package` validates/packages it without accessing a cluster. See [build versions and release policy](docs/releases.md) for prerequisites and the multi-platform OCI target.
 
