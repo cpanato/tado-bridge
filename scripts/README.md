@@ -60,7 +60,7 @@ Normal operation and migration instructions are in [container setup](../docs/con
 
 ## Chart deployment integration
 
-`make chart-integration` (or `./scripts/chart-integration.sh`) uses the same GoReleaser snapshots to install the chart through `ct install`. It requires Docker, Kind, kubectl, Helm and chart-testing. CI installs verified, pinned tooling; local versions are recorded in [build tooling](../docs/releases.md).
+`make chart-integration` (or `./scripts/chart-integration.sh`) uses the same GoReleaser snapshots to install the chart through `ct install`. It requires Docker, Kind, kubectl, Helm and chart-testing. A dedicated Helm job downloads the prebuilt images from the GoReleaser job using a same-run artifact retained for one day. CI installs verified, pinned tooling; local versions are recorded in [build tooling](../docs/releases.md).
 
 Static test settings live in `charts/tado-bridge/ci/integration-values.yaml`, automatically discovered by chart-testing for lint and install. The script generates `.local/helm-ci-values.yaml` only for `hostAliases`, whose Service IP is allocated at runtime. Neither file contains real credentials. Additional `ci/*-values.yaml` files create additional scenarios; the current post-install checks and fixed release name assume one scenario, so extend the runner's per-scenario checks/cleanup before adding more.
 

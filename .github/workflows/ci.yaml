@@ -82,7 +82,7 @@ jobs:
           skip-cache: true
 
   packaging:
-    name: GoReleaser and chart integration
+    name: GoReleaser and container checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -121,6 +121,47 @@ jobs:
           IMAGE: ko.local:snapshot
         run: ./scripts/compose-smoke.sh
 
+      - name: Export snapshot images for chart tests
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tado-bridge-ci-images"
+          docker image save ko.local:snapshot ko.local:fixture | gzip > "${RUNNER_TEMP}/tado-bridge-ci-images/images.tar.gz"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: chart-test-images
+          path: ${{ runner.temp }}/tado-bridge-ci-images/images.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  helm:
+    name: Helm chart integration
+    needs: packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          check-latest: true
+          cache: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: chart-test-images
+          path: ${{ runner.temp }}/tado-bridge-ci-images
+
+      - name: Load GoReleaser snapshot images
+        run: docker image load --input "${RUNNER_TEMP}/tado-bridge-ci-images/images.tar.gz"
+
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.3.1
@@ -133,10 +174,6 @@ jobs:
           check-latest: true
 
       - uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510 # v2.9.0
-        with:
-          version: v3.15.0
-          yamllint_version: 1.38.0
-          yamale_version: 6.1.0
 
       - name: Lint chart with chart-testing
         run: ct lint --config .github/ct.yaml
@@ -147,7 +184,6 @@ jobs:
           kubectl_version: v1.37.1
           cluster_name: tado-bridge-ci
           config: .github/helm/kind.yaml
-          node_image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
           wait: 120s
 
       - name: Install and exercise chart against synthetic HTTPS tado APIs
