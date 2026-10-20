@@ -16,9 +16,16 @@ fi
 
 fixture_dir="$(mktemp -d)"
 cleanup() {
+  result=$?
+  if [ "$result" -ne 0 ]; then
+    kubectl --namespace "$namespace" get pods -o wide || true
+    kubectl --namespace "$namespace" logs deployment/tado-bridge --tail=50 || true
+    kubectl --namespace "$namespace" logs deployment/tado-fake --tail=50 || true
+  fi
   kubectl delete namespace "$namespace" --wait=false >/dev/null 2>&1 || true
   rm -rf "$fixture_dir"
   rm -f .local/helm-ci-values.yaml
+  return "$result"
 }
 trap cleanup EXIT
 
