@@ -1,63 +1,48 @@
 # tado-bridge
 
-Small, read-only Go CLI and local service for tado° V3/V3+ and X. M1 covers OAuth/discovery, the `read` command provides one-shot measurements, and M2 adds periodic collection, cached JSON, health and readiness. M3 adds optional Prometheus metrics, nonroot containers and CI runtime checks. M4 adds an opt-in TRMNL adapter that publishes selected cached readings. No thermostat controls are implemented.
+A read-only CLI and local service for tado° V3/V3+ and X. It collects indoor-climate readings and exposes a cached JSON API, with optional Prometheus metrics and TRMNL publishing. The collector works independently of any display or dashboard.
 
-## Prerequisites and local use
+## What is available
 
-Go 1.27.3 or newer, a tado° account, internet access and a browser for authorization. The CLI uses [Cobra](https://github.com/spf13/cobra); provider and credential handling use the Go standard library. Both V3/V3+ and X cloud discovery are supported; local Matter access is outside this milestone.
+- Browser-based OAuth login, automatic token refresh, and home/room discovery, including accounts with mixed V3 and X homes.
+- One-shot or scheduled collection of temperature, target temperature, humidity and heating activity.
+- A local cached API with health/readiness endpoints, request budgeting and bounded retries.
+- Optional Prometheus metrics and selected-room publishing to a TRMNL private plugin.
+- Local Compose operation, a Helm chart, and GoReleaser builds for binaries and container images.
 
-Use the latest stable Go release and the latest stable versions of any dependencies when adding or updating them; verify current upstream releases and run the project checks after upgrades.
+## Quick start
+
+To build from source, install the latest stable Go release; the minimum version is declared in [go.mod](go.mod). You also need a tado° account, internet access and a browser for authorization.
 
 ```sh
-go build -o bin/tado-bridge ./cmd/tado-bridge
+make build
 export TADO_CREDENTIALS_FILE="$HOME/.config/tado-bridge/credentials.json"
+
 ./bin/tado-bridge auth login
-./bin/tado-bridge auth status
 ./bin/tado-bridge discover
 ./bin/tado-bridge read
-```
-
-Login prints a complete verification URL and user code to stderr. Open the entire URL (including its query parameters), enter the code if prompted and authorize with tado°. The URL includes the client ID and user code; opening the bare `/oauth2/device` URL can produce a `missing_client_id` error. The CLI waits at the upstream polling interval, handles pending/slow-down responses and stops at expiry or Ctrl-C. It never asks for your account password. Do not share the authorization URL, code or tokens.
-
-Run `./bin/tado-bridge` or `./bin/tado-bridge auth` to see available commands. Every command supports `--help`/`-h`, for example `./bin/tado-bridge read --help` or `./bin/tado-bridge serve --help`. Help works without credentials and never contacts tado°. Commands that access tado° require `TADO_CREDENTIALS_FILE` and reject unexpected arguments before accessing credentials. `healthcheck` checks the local HTTP process without opening credentials or contacting tado°.
-
-`discover` prints filtered JSON to stdout, with IDs as strings:
-
-```json
-{
-  "provider": "tado",
-  "homes": [{"id": "123", "name": "Example home", "zones": [{"id": "1", "name": "Living room"}]}]
-}
-```
-
-Discovery automatically checks each home's generation: V3/V3+ uses the zones endpoint; X uses the rooms-and-devices endpoint. X rooms are exposed as `zones` with the same ID/name fields, including in accounts with mixed home generations. Only IDs and names are copied by `discover`; email, addresses, account metadata, device serials and credentials are excluded. Names and stable IDs are still private: take care when saving or sharing this output.
-
-Request counts are printed separately to stderr, including on failure. A discovery with H homes makes `1 + 2*H` REST requests: one home list, then generation and zone/room discovery per home. Expired credentials add one OAuth refresh. There are no automatic API retries, including on 401 or 429. Correct an authorization problem with `auth login`; wait for quota recovery after 429. `serve` handles budgets, Retry-After and scheduled retries.
-
-## One-shot measurements
-
-`read` makes one read-only collection and prints a normalized snapshot to stdout:
-
-```sh
-./bin/tado-bridge read
-```
-
-Each zone includes `temperature_c`, `target_temperature_c`, `humidity_percent`, `heating_active` and `temperature_measured_at`. Unknown fields are explicit JSON `null`; zero and false remain valid readings. Temperature is Celsius and humidity is percent. A room configured as `OFF` has no active target, so `target_temperature_c` is `null` even if upstream retains an old setpoint. Heating activity reflects an explicit upstream heating-power percentage above zero, not a comparison of target and measured temperatures or confirmation that a boiler is firing.
-
-`collected_at` is the UTC RFC3339 completion time of the entire collection. `temperature_measured_at` preserves a sensor timestamp only when upstream supplies it; it is `null` otherwise. Collection time does not prove sensor freshness, including for disconnected devices; this command does not infer freshness from a successful API response.
-
-An X home takes three REST requests in total (`/me`, generation, all room states), regardless of room count. A V3/V3+ home with Z zones takes `3 + Z` REST requests (home list, generation, zone list, then one state request per zone). Mixed accounts cost `1 + 2*H + number of V3 zones`. An expired access token adds one OAuth refresh. Any failed request aborts the command without printing a partial snapshot. Nothing is cached by `read`, and it starts no background polling. Repeated executions consume upstream quota.
-
-## Local service
-
-After device login, start the service:
-
-```sh
-export TADO_CREDENTIALS_FILE="$HOME/.config/tado-bridge/credentials.json"
 ./bin/tado-bridge serve
 ```
 
-In another terminal:
+Login prints a verification URL and user code. Open the **complete URL, including its query parameters**, and authorize in your browser. The CLI waits for approval and never asks for your account password. Keep the URL, code and credentials private.
+
+`discover` returns home and room IDs needed for explicit room selection. X rooms use the same `zones` representation as V3 zones. `read` prints one JSON snapshot and exits; repeated runs consume upstream quota. `serve` collects in the background until Ctrl-C or SIGTERM.
+
+| Command | Purpose |
+|---|---|
+| `auth login` | Authorize access and save credentials |
+| `auth status` | Inspect local credentials and expiry; does not check upstream validity |
+| `auth logout` | Delete local credentials; does not revoke upstream access |
+| `discover` | Print home and room IDs/names as JSON |
+| `read` | Collect and print measurements once |
+| `serve` | Run the collector and cached HTTP API |
+| `healthcheck` | Check local HTTP liveness without credentials or upstream calls |
+
+Every command supports `--help`. JSON results go to stdout; login instructions, logs and request counts go to stderr. See [authentication](docs/authentication.md) for OAuth details and troubleshooting.
+
+## Local API and readings
+
+With `serve` running, use another terminal:
 
 ```sh
 curl --fail http://127.0.0.1:8080/healthz
@@ -65,32 +50,61 @@ curl --fail http://127.0.0.1:8080/readyz
 curl --fail http://127.0.0.1:8080/api/v1/snapshot
 ```
 
-The first collection starts immediately; snapshot/readiness return 503 until data are available. All API reads use the cache and never cause upstream calls. After a failed collection, the snapshot endpoint keeps returning the last good data with its original `collected_at`; readiness returns 503 when it is too old or has no available climate values. Health remains 200 during upstream failures. Ctrl-C/SIGTERM stops both the server and collector and releases the credentials lock.
+| Endpoint | Behavior |
+|---|---|
+| `/api/v1/snapshot` | Latest cached JSON; 503 before the first successful collection |
+| `/healthz` | Process liveness, including during upstream outages |
+| `/readyz` | 200 when cached climate readings are available and within the configured age limit; otherwise 503 |
+| `/metrics` | Optional Prometheus metrics; disabled by default |
 
-| Environment variable | Default | Purpose |
+API reads never trigger tado° requests. A collection failure preserves the last good snapshot, including its original `collected_at`. The snapshot endpoint can therefore return stale data with HTTP 200; consumers must check timestamps or readiness.
+
+Readings use Celsius and humidity percent. Missing values are `null`; zero and `false` are valid. A room switched off has no active target temperature. Heating activity comes from upstream heating power, and does not prove that a boiler is firing. `collected_at` records collection time; `temperature_measured_at` is populated only when tado° supplies a sensor timestamp, so a successful collection does not guarantee a recent sensor reading.
+
+See [architecture and scheduling](docs/architecture.md) and [metrics](docs/metrics.md) for the full behavior.
+
+## Configuration and request budget
+
+Configuration uses environment variables:
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `LISTEN_ADDR` | `127.0.0.1:8080` | Local HTTP bind; `localhost` and literal loopback IPs are accepted |
-| `POLL_INTERVAL` | `30m` | Requested minimum delay; at least `5m`, increased to fit the request budget |
-| `MAX_SNAPSHOT_AGE` | `2h` | Maximum collection age for readiness |
-| `TADO_DAILY_REQUEST_BUDGET` | `90` | Rolling 24-hour cap on attempted REST and OAuth requests in this service process |
-| `API_TOKEN` | unset | Optional bearer token protecting `/api/v1/snapshot` and enabled `/metrics`; never logged |
-| `ALLOW_NETWORK_EXPOSURE` | `false` | Non-loopback binds require this opt-in and a nonempty `API_TOKEN` |
-| `METRICS_ENABLED` | `false` | Enable cached Prometheus metrics at `/metrics`; see [metrics](docs/metrics.md) |
+| `TADO_CREDENTIALS_FILE` | required | Private writable credentials path |
+| `LISTEN_ADDR` | `127.0.0.1:8080` | HTTP listener |
+| `POLL_INTERVAL` | `30m` | Requested minimum collection delay; at least `5m` |
+| `MAX_SNAPSHOT_AGE` | `2h` | Freshness limit for readiness and TRMNL |
+| `TADO_DAILY_REQUEST_BUDGET` | `90` | Process-local rolling 24-hour cap on REST and OAuth attempts |
+| `API_TOKEN` | unset | Bearer token for snapshots and enabled metrics |
+| `ALLOW_NETWORK_EXPOSURE` | `false` | Required with `API_TOKEN` to bind outside loopback |
+| `METRICS_ENABLED` | `false` | Enable `/metrics` |
 
-The effective interval is at least `24h * estimated cycle requests / budget`. For one X home, reserving three REST calls plus one refresh yields **64 minutes** with the default budget. The configured 30-minute delay therefore does not imply 48 collections/day. Larger V3 accounts may need a larger `MAX_SNAPSHOT_AGE` to match their effective cadence. Request attempts, including retries, count against the same cap; 429 respects upstream reset deadlines, and transient errors have bounded retries with jitter.
+When `API_TOKEN` is set, send `Authorization: Bearer <token>` to the snapshot and metrics endpoints. Health/readiness remain unauthenticated. Keep remote access behind trusted networking and an appropriate authentication/TLS boundary.
 
-Budget state is in memory and resets on restart; it does not track other integrations or commands/processes, and cannot reset tado's account quota. Choose a budget appropriate to your account and leave headroom for other clients. The service holds the credentials lock for its lifetime, so stop it before running another command against the same file. See [architecture and scheduling](docs/architecture.md) for the exact accounting, retention and shutdown behavior. Keep the listener local; configure authentication and trusted networking explicitly before any remote access.
+The request budget can increase the configured polling interval. One X home needs three REST calls per collection; reserving an OAuth refresh gives an effective **64-minute interval** with the default budget. V3 homes need additional requests per zone, so their collection interval and freshness limit may need adjustment. HTTP 429 honors upstream reset deadlines; transient failures use bounded retries.
 
+The budget counts this service process only. Other clients and CLI commands consume additional quota, and restarting resets local accounting without resetting tado°'s quota. Leave headroom for other integrations.
 
-## Containers and Helm
+## Credentials and runtime state
 
-After configuring credentials and the API token, use `make compose-up` to build the local Chainguard-based image with ko and then start Compose. See [Compose setup](docs/containers.md); `make compose-down` stops it. `make release-snapshot` uses GoReleaser to build Linux/macOS binaries and daemon-local container snapshots. These local commands do not publish. The separate version-tag workflow publishes binaries and the GHCR image with native GitHub release notes; see [release operation](docs/releases.md).
+Credentials are stored unencrypted outside the repository, with private directories and mode-0600 files. Refresh-token rotation atomically replaces the file, so the whole credentials directory must be writable. Treat IDs, room names and climate readings as private data too.
 
-The [Helm chart](charts/tado-bridge/README.md) packages one collector with a writable credentials PVC, existing token Secret and ClusterIP-only Service. `make helm-check helm-package` validates/packages it without accessing a cluster. See [build versions and release policy](docs/releases.md) for prerequisites and the multi-platform OCI target.
+Run one instance per credential set. Stop `serve` before running another command against the same file, and do not give copies of its refresh token to another integration. The process holds a credentials lock until shutdown; after a forced termination, confirm that no instance is running before removing a stale lock. See [security](SECURITY.md) for storage and recovery details.
 
-## TRMNL previews
+## Containers, Helm and releases
 
-Optional private-plugin layouts use selected cached readings only. The examples below contain **synthetic data**, including missing readings and a valid zero; names and measurements do not come from a real home. Large temperatures, explicit heating indicators and compact secondary values keep the monochrome screens readable.
+After configuring credentials and `API_TOKEN`, `make compose-up` builds the local image with ko and starts Compose. `make compose-down` stops it. Compose publishes only on host loopback; stop any native instance using the same credentials before starting it. See [container setup](docs/containers.md) for mounts, ownership and settings.
+
+The [Helm chart](charts/tado-bridge/README.md) runs one collector with Recreate updates, an existing writable credentials PVC, existing Secrets and a ClusterIP-only Service. `make helm-check helm-package` validates and packages it without deploying.
+
+`make release-snapshot` builds Linux/macOS amd64/arm64 binaries and local Linux container images without publishing. The separate version-tag workflow publishes binaries, checksums and the multi-platform GHCR image, with native GitHub release notes and keyless cosign signatures. See [release operation and signature verification](docs/releases.md). Tags, releases and deployments require an explicit operator decision.
+
+## TRMNL
+
+TRMNL publishing is disabled by default. Enabling it sends explicitly selected cached room readings, display aliases and timestamps to TRMNL cloud. Configure your private-plugin webhook, `TRMNL_ENABLED=true` and `TRMNL_ROOMS`; the collector and API continue to work when TRMNL is disabled or unavailable.
+
+See [private-plugin setup and device testing](integrations/trmnl/README.md). `make trmnl-package` creates an import ZIP. For an existing plugin, replace its four **Edit Markup** tabs and save; importing again creates another plugin.
+
+The previews below use **synthetic data**, including missing readings and a valid zero. Smaller layouts follow the configured room order and show how many rooms are visible. Stale collections display a warning.
 
 **Full · 800 × 480 · eight rooms**
 
@@ -109,34 +123,20 @@ Optional private-plugin layouts use selected cached readings only. The examples 
   </tr>
 </table>
 
-The smaller layouts follow the configured room order and show how many rooms are visible. Stale collections display an explicit warning. These are local browser renders using TRMNL's stylesheet; final rendering and refresh scheduling should also be checked on your virtual or physical device.
+These are browser renders using TRMNL's stylesheet. Final rendering and refresh behavior should also be checked on your virtual or physical device.
 
-See [private-plugin setup and virtual-device testing](integrations/trmnl/README.md). Use `make trmnl-package` to create an import ZIP. To update an existing plugin, replace its four **Edit Markup** tabs and save; importing again creates another plugin. Publishing real climate data requires `TRMNL_ENABLED=true`, your private webhook and an explicit room selection.
+## Scope and future work
 
-## Credentials
+The current integration depends on tado° cloud access. It does not provide local Matter support, thermostat controls, a built-in dashboard, historical storage, MQTT or generic outbound webhooks. Additional consumers can use the cached JSON API without changing the collector.
 
-The credentials path is required explicitly. New parent directories use `0700`; files are written with `0600`, synced and atomically replaced in the same directory. Existing credential files must be regular files without group/other permissions; symlinks are rejected when loading. Choose a directory controlled only by your user, outside the repository, and exclude it from shared backups. Secrets are not encrypted at rest.
+MQTT and other output adapters are possible future extensions, driven by actual needs. Continuous 24-hour testing on an always-on host and acceptance with a physical TRMNL device remain follow-up validation work. The [design document](docs/design/tado-bridge-design.md) describes the architecture and current scope.
 
-Access tokens are reused until within 30 seconds of their reported expiry. Rotated refresh credentials are saved before discovery starts. A credentials lock serializes commands that use the same path; use one canonical path and do not share the file with another integration. If a process is forcibly killed, verify no command is running before manually removing the `<credentials-file>.lock` directory. A failed save after upstream rotation can require a new login.
-
-`auth status` checks the local file and expiry only; it does not contact tado° or prove that authorization remains valid. `auth logout` deletes local credentials only, without revoking upstream authorization:
+## Development
 
 ```sh
-./bin/tado-bridge auth logout
-```
-
-## Development and verification
-
-```sh
-go test ./...
-go vet ./...
-go test -race ./...
-go mod verify
 make check
 ```
 
-`make check` also requires golangci-lint v2.15.0. Tests use synthetic fixtures and local HTTP servers; no real credentials or upstream calls are required. If your environment restricts the default Go build cache, set `GOCACHE` to a writable directory.
+This runs race tests, vet, lint, vulnerability checks and module verification; golangci-lint is required. Tests use synthetic data and local servers, without real tado° credentials. Workflow changes should also pass `actionlint` and `zizmor --persona pedantic .github/workflows .github/dependabot.yml`.
 
-The [packaging integration scripts](scripts/README.md) check prebuilt images, Compose and chart deployments with synthetic data; see their prerequisites, isolation and troubleshooting instructions.
-
-See [upstream verification](docs/authentication.md) for endpoints, sources, quota assumptions and live acceptance results. The service remains independent of displays/dashboards. See [container setup](docs/containers.md), [metrics](docs/metrics.md), [security](SECURITY.md) and [release policy](docs/releases.md). See the [TRMNL setup and virtual-device test](integrations/trmnl/README.md) for the opt-in M4 adapter. It sends selected climate data to TRMNL cloud only when enabled.
+The [packaging integration scripts](scripts/README.md) cover prebuilt images, Compose and chart installation in a disposable Kind cluster. Keep dependencies and build tools current, and verify updates against their official sources.
