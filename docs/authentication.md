@@ -1,6 +1,6 @@
-# M1 upstream verification
+# Authentication, upstream access and validation
 
-Sources checked on 2026-10-18 before implementing the client:
+Sources initially checked on 2026-10-18. The two official tado° guides were rechecked on 2026-10-21; third-party links record the implementation evidence used during development:
 
 - [tado° device authorization guide](https://help.tado.com/en/articles/8565472-how-do-i-authenticate-to-access-the-rest-api): official OAuth endpoints, public client ID, offline scope, refresh rotation and `/me` example.
 - [tado° REST usage limits](https://help.tado.com/en/articles/12165739-limitation-for-rest-api-usage): official quota explanation and `ratelimit` header format.
@@ -40,24 +40,32 @@ Synthetic server observations from the tests:
 
 The CLI prints REST and OAuth attempt counts separately. These are client-side HTTP attempts, not confirmed server-side quota debits; failed network attempts may not reach tado°. Normal successful discovery costs `1 + 2 * number of homes` REST calls and does not fetch zone states. The CLI never probes both generations' discovery routes for the same home. Legacy homes without a generation field use the V3 route, matching PyTado's generation detection convention.
 
-The official quota article currently lists 100 requests/day, or 20,000/day with Auto-Assist/AI Assist. Treat 100/day as a conservative planning ceiling; actual account policy, shared use by other integrations, reset behavior, whether OAuth requests consume that quota and how limits are shared between the V3/X API hosts need live confirmation. A fixed 30-minute schedule with one X home would cost 144 REST requests/day before OAuth and other clients. M2 therefore increases the effective interval to fit the configured rolling budget, reserving refresh capacity as described below.
+The official quota article currently lists 100 requests/day, or 20,000/day with Auto-Assist/AI Assist. Treat 100/day as a conservative planning ceiling; actual account policy, shared use by other integrations, reset behavior, whether OAuth requests consume that quota and how limits are shared between the V3/X API hosts need live confirmation. A fixed 30-minute schedule with one X home would cost 144 REST requests/day before OAuth and other clients. The service therefore increases the effective interval to fit the configured rolling budget, reserving refresh capacity as described below.
 
-## Boundaries and remaining acceptance checks
+## Live validation and remaining limits
 
 Official documentation describes hobbyist/open-source access without technical support and says the REST API is not officially supported for third parties. No complete, supported V3 API schema or contractual availability guarantee was found in these sources. Nothing here implies a supported commercial API entitlement or an assessment of all applicable account terms.
 
-Live investigation confirmed the operator's home reports `LINE_X`: the V3 zones route returned HTTP 200 with an empty list, while the X rooms-and-devices route returned HTTP 200 with eight rooms. M1 was explicitly expanded to support X cloud discovery. The domain remains generation-neutral; no device details are emitted. Local Matter remains out of scope.
+Live investigation confirmed the operator's home reports `LINE_X`: the V3 zones route returned HTTP 200 with an empty list, while the X rooms-and-devices route returned HTTP 200 with eight rooms. The client supports X cloud discovery. The domain remains generation-neutral; no device details are emitted. Local Matter remains out of scope.
 
 The rebuilt CLI was then verified end to end: `discover` returned one home and eight zones, reporting `api=3 oauth=0`. Verification displayed counts only and did not save or log the account's home/room payloads.
 
 The one-shot `read` extension was verified on the live X home: eight measured temperatures, eight humidity readings and eight explicit heating states, using three REST calls and one OAuth refresh. All eight rooms reported `setting.power=OFF`, so normalized targets were `null`. Refresh and persistence completed successfully; no credentials or private readings were logged or saved as fixtures. Counts were displayed only for this manual acceptance check.
 
-The new command costs `1 + 2 * number of homes + number of V3 zones` REST calls; X states need no additional per-room requests. Unknown sensor fields stay null. The completion timestamp is not a sensor timestamp; upstream temperature timestamps are preserved in UTC when available. `heating_active` uses only valid explicit heating-power percentages, never target-versus-measured inference. OFF settings suppress the inactive target temperature.
+A one-shot collection costs `1 + 2 * number of homes + number of V3 zones` REST calls; X states need no additional per-room requests. Unknown sensor fields stay null. The completion timestamp is not a sensor timestamp; upstream temperature timestamps are preserved in UTC when available. `heating_active` uses only valid explicit heating-power percentages, never target-versus-measured inference. OFF settings suppress the inactive target temperature.
 
 V3/V3+ live discovery and measurements still need verification. Fixtures are synthetic and are not presented as captured production responses. Do not paste raw upstream bodies, user codes or credential files into issues or commits. Inspect quota headers privately if needed; the CLI does not currently expose them.
 
-The M2 local service uses the same read/refresh paths, with a per-request guard counting REST, OAuth and failed network attempts. The guard applies only to `serve`; one-shot commands remain explicitly initiated reads. The process-local rolling 24-hour budget defaults to 90. Request pacing reserves at least one refresh per cycle even when the current access token is valid. Counts reset on process restart; neither this counter nor restarting can reset tado's account-wide quota. Exact quota sharing with other clients/API hosts remains account-dependent.
+The local service uses the same read/refresh paths, with a per-request guard counting REST, OAuth and failed network attempts. The guard applies only to `serve`; one-shot commands remain explicitly initiated reads. The process-local rolling 24-hour budget defaults to 90. Request pacing reserves at least one refresh per cycle even when the current access token is valid. Counts reset on process restart; neither this counter nor restarting can reset tado's account-wide quota. Exact quota sharing with other clients/API hosts remains account-dependent.
 
-M2 live acceptance on loopback returned health/readiness 200, rejected an unauthenticated snapshot request with 401 and served eight temperatures to an authenticated request. Repeated snapshot reads kept the same collection timestamp without additional upstream calls. Total upstream attempts were three REST calls plus one OAuth refresh; SIGTERM returned exit code zero. The test displayed only status/count summaries and did not persist snapshots or token values.
+Live service acceptance on loopback returned health/readiness 200, rejected an unauthenticated snapshot request with 401 and served eight temperatures to an authenticated request. Repeated snapshot reads kept the same collection timestamp without additional upstream calls. Total upstream attempts were three REST calls plus one OAuth refresh; SIGTERM returned exit code zero. The test displayed only status/count summaries and did not persist snapshots or token values.
 
-The service serializes credential access for its full lifetime. On 429 it honors Retry-After and exhausted RateLimit reset deadlines, with a conservative one-hour fallback if no deadline is supplied. Transient retries count against the same budget. See [M2 architecture](architecture.md) for details. M3 provides [containers](containers.md) and [optional cached metrics](metrics.md). External integrations remain a later milestone.
+The service serializes credential access for its full lifetime. On 429 it honors Retry-After and exhausted RateLimit reset deadlines, with a conservative one-hour fallback if no deadline is supplied. Transient retries count against the same budget. See [service architecture](architecture.md), [containers](containers.md) and [optional cached metrics](metrics.md). The [TRMNL adapter](../integrations/trmnl/README.md) is implemented and publishes selected cached readings only when explicitly enabled.
+
+## Extended runtime observation
+
+The native test on 2026-10-20 recorded nine successful collections: 27 REST attempts and nine OAuth attempts. Nine TRMNL webhook publications returned HTTP 200, with no collection failures or HTTP 429 recorded. Normal collection gaps were approximately 64 minutes, matching the default request budget.
+
+The log also contained longer gaps, so this was not an uninterrupted 24-hour availability test. The last publication followed its collection by approximately 2 hours 38 minutes; with the default two-hour freshness limit, the publisher marks that data stale. The log did not record the stale field or an explicit shutdown result. No raw room payloads or credentials are included here.
+
+This initial run and virtual-device checks are accepted. Continuous testing on an always-on host and validation with a physical TRMNL device remain deferred until that device is available. V3/V3+ live validation and account-wide quota sharing remain open checks.

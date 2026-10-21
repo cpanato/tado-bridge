@@ -9,7 +9,6 @@ A read-only CLI and local service for tado° V3/V3+ and X. It collects indoor-cl
 - A local cached API with health/readiness endpoints, request budgeting and bounded retries.
 - Optional Prometheus metrics and selected-room publishing to a TRMNL private plugin.
 - Local Compose operation, a Helm chart, and GoReleaser builds for binaries and container images.
-- Cosign signing configured for release binaries, checksums and container manifests.
 
 ## Quick start
 
@@ -130,7 +129,7 @@ These are browser renders using TRMNL's stylesheet. Final rendering and refresh 
 
 The current integration depends on tado° cloud access. It does not provide local Matter support, thermostat controls, a built-in dashboard, historical storage, MQTT or generic outbound webhooks. Additional consumers can use the cached JSON API without changing the collector.
 
-MQTT and other output adapters are possible future extensions, driven by actual needs. Continuous 24-hour testing on an always-on host and acceptance with a physical TRMNL device remain follow-up validation work. The [design document](docs/design/tado-bridge-design.md) retains the architecture and implementation history.
+MQTT and other output adapters are possible future extensions, driven by actual needs. Continuous 24-hour testing on an always-on host and acceptance with a physical TRMNL device remain follow-up validation work. The [design document](docs/design/tado-bridge-design.md) describes the architecture and current scope.
 
 ## Development
 
@@ -138,6 +137,6 @@ MQTT and other output adapters are possible future extensions, driven by actual 
 make check
 ```
 
-This runs race tests, vet, lint, vulnerability checks and module verification; golangci-lint v2.15 is required. Tests use synthetic data and local servers, without real tado° credentials. Workflow changes should also pass `actionlint` and `zizmor --persona pedantic .github/workflows .github/dependabot.yml`.
+This runs race tests, vet, lint, vulnerability checks and module verification; golangci-lint is required. Tests use synthetic data and local servers, without real tado° credentials. Workflow changes should also pass `actionlint` and `zizmor --persona pedantic .github/workflows .github/dependabot.yml`.
 
 The [packaging integration scripts](scripts/README.md) cover prebuilt images, Compose and chart installation in a disposable Kind cluster. Keep dependencies and build tools current, and verify updates against their official sources.

@@ -4,19 +4,9 @@ Merging a PR does not publish a release, create a Git tag, push a container or d
 
 ## Local builds
 
-Versions verified against official upstream sources on 2026-10-20:
+Local builds use Go 1.27+, GoReleaser and ko. Docker is required for daemon-local images; Helm is needed for chart validation and packaging. Chart deployment tests additionally use chart-testing, Kind, kubectl and Python tooling, as described in the [integration scripts](../scripts/README.md).
 
-| Tool | Stable version | Source |
-|---|---|---|
-| Go | 1.27.3 | [Official download feed](https://go.dev/dl/?mode=json) |
-| GoReleaser | 2.18.3 | [Official release](https://github.com/goreleaser/goreleaser/releases/tag/v2.18.3) |
-| ko | 0.19.1 | [Official release](https://github.com/ko-build/ko/releases/tag/v0.19.1) |
-| Helm | 4.3.1 | [Official release](https://github.com/helm/helm/releases/tag/v4.3.1) |
-| chart-testing | 3.15.0 | [Official release](https://github.com/helm/chart-testing/releases/tag/v3.15.0) |
-| Kind | 0.33.0 | [Official release](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0) |
-| kubectl | 1.37.1 | [Official releases](https://kubernetes.io/releases/) |
-| yamllint | 1.38.0 | [PyPI](https://pypi.org/project/yamllint/1.38.0/) |
-| Yamale | 6.1.0 | [PyPI](https://pypi.org/project/yamale/6.1.0/) |
+Use current stable releases from the official tool sources. The minimum Go patch is declared in [go.mod](../go.mod); CI tool selection is defined in the [workflows](../.github/workflows). The cosign installer uses its own defaults without overrides.
 
 ```sh
 make release-check
@@ -37,7 +27,7 @@ All supported image build targets set the OCI label `org.opencontainers.image.cr
 
 Container entrypoints are `/ko-app/tado-bridge`; Compose and Helm pass `serve` explicitly because standalone ko does not add a default command. Images are built exclusively with ko, directly or through GoReleaser. No source files, credential directories or `.local` logs are copied: ko packages the compiled binary and the main package's optional `kodata`, which this project does not use. `make compose-up` validates configuration and completes the ko build before starting Compose; `IMAGE` or `TADO_BRIDGE_IMAGE` selects the same local tag for both steps.
 
-CI uses a single GoReleaser snapshot job for every binary and container build; it has no separate ko/container or cross-build jobs. The resulting daemon-local snapshot is reused by container and Compose smoke tests without rebuilding. Both Linux image variants are built, while runtime CI smoke coverage uses the loaded amd64 image on the Ubuntu runner. A dedicated Helm job depends on the GoReleaser job and downloads its two snapshot images through a same-run artifact with one-day retention; no rebuild or registry push is needed. It validates/packages Helm and uses chart-testing-action with Kind to install against synthetic HTTPS APIs, verify readiness and token persistence, then restart the application. The test cluster exposes no application ports to the host and uses no real credentials. Jobs use `contents: read`, SHA-pinned actions, no publication trigger, no release artifacts and no external cluster credentials or registry write permissions in the snapshot jobs. CI uses Go `stable` with `check-latest: true`; the Helm job uses the required version from `go.mod`. Keep `go.mod` updated against the official Go download feed and ensure the Actions stable alias satisfies its required patch. GoReleaser follows the latest stable release in CI; the tool versions above record local verification. Its embedded ko version is controlled by that release, while standalone ko remains available through local Make targets. Keep the base-image reference in `.ko.yaml` and `.goreleaser.yaml` synchronized. The `latest` tag is resolved at build time. Dependabot tracks Go modules and Actions weekly with a seven-day cooldown for version updates; security updates are exempt from cooldown.
+CI uses a single GoReleaser snapshot job for every binary and container build; it has no separate ko/container or cross-build jobs. The resulting daemon-local snapshot is reused by container and Compose smoke tests without rebuilding. Both Linux image variants are built, while runtime CI smoke coverage uses the loaded amd64 image on the Ubuntu runner. A dedicated Helm job depends on the GoReleaser job and downloads its two snapshot images through a same-run artifact with one-day retention; no rebuild or registry push is needed. It validates/packages Helm and uses chart-testing-action with Kind to install against synthetic HTTPS APIs, verify readiness and token persistence, then restart the application. The test cluster exposes no application ports to the host and uses no real credentials. Jobs use `contents: read`, SHA-pinned actions, no publication trigger, no release artifacts and no external cluster credentials or registry write permissions in the snapshot jobs. CI uses Go `stable` with `check-latest: true`; the Helm job uses the required version from `go.mod`. Keep `go.mod` updated against the official Go download feed and ensure the Actions stable alias satisfies its required patch. GoReleaser follows the latest stable release in CI. Its embedded ko version is controlled by that release, while standalone ko remains available through local Make targets. Keep the base-image reference in `.ko.yaml` and `.goreleaser.yaml` synchronized. The `latest` tag is resolved at build time. Dependabot tracks Go modules and Actions weekly with a seven-day cooldown for version updates; security updates are exempt from cooldown.
 
 ## GitHub release notes
 

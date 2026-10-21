@@ -1,6 +1,6 @@
 # Local container operation
 
-The default local build uses ko 0.19.1 with Go 1.27.3 and the public [Chainguard static image](https://images.chainguard.dev/directory/image/static/overview), referenced as `cgr.dev/chainguard/static:latest` and resolved at build time. Both Linux amd64/arm64 are supported. The image runs as UID/GID 65532:65532. GoReleaser snapshots build binaries and images through its native ko integration; see [build tooling and release policy](releases.md). Images are built from the Go binary with ko; no Docker build context is used.
+The default local build uses ko with Go 1.27+ and the public [Chainguard static image](https://images.chainguard.dev/directory/image/static/overview), referenced as `cgr.dev/chainguard/static:latest` and resolved at build time. Both Linux amd64/arm64 are supported. The image runs as UID/GID 65532:65532. GoReleaser snapshots build binaries and images through its native ko integration; see [build tooling and release policy](releases.md). Images are built from the Go binary with ko; no Docker build context is used.
 
 ## Compose
 
@@ -21,7 +21,7 @@ make compose-up
 
 `make compose-up` validates configuration, builds the image with ko and then starts Compose. `make compose-down` stops it. To run these steps separately, use `make image`, `docker compose config --quiet` and `docker compose up`, in that order.
 
-Compose consumes the already built `ko.local/tado-bridge:local` image, passes `serve` explicitly and never pulls an image automatically. `TADO_BRIDGE_IMAGE` can select a different image already present locally. Stop the native service before using its credential directory in Compose, and do not start a second instance just to test packaging while the day-long native test is running. Local runtime tests use a separate synthetic credentials directory instead.
+Compose consumes the already built `ko.local/tado-bridge:local` image, passes `serve` explicitly and never pulls an image automatically. `TADO_BRIDGE_IMAGE` can select a different image already present locally. Stop any native service before using its credential directory in Compose. Packaging checks use separate synthetic credentials and can run alongside a real instance.
 
 Use the same API_TOKEN in your clients; keep it private. It is passed only as runtime configuration, never as a build argument or image layer. Compose config output can contain environment values, so use `--quiet` when validating it and do not paste expanded configuration into issues.
 
