@@ -12,7 +12,7 @@ M3 implementation note: optional Prometheus metrics use cached aggregates withou
 
 M4 implementation note: the disabled-by-default TRMNL adapter publishes only explicitly selected cached rooms to an official private-plugin HTTPS webhook. Templates and a synthetic eight-room fixture support manual browser/virtual-device acceptance; no real webhook is called by tests. See `integrations/trmnl/README.md`.
 
-Post-M4 acceptance and packaging note: the operator confirmed the real-data TRMNL refresh. Local packaging now uses digest-pinned Chainguard static with ko, GoReleaser snapshots and a private single-replica Helm chart. Go is updated to 1.27.3. Snapshots/images/charts are built and validated locally without publishing or external deployment. See `docs/releases.md`, `docs/containers.md` and `charts/tado-bridge/README.md`.
+Post-M4 acceptance and packaging note: the operator confirmed the real-data TRMNL refresh. Local packaging now uses Chainguard static `latest` with ko, GoReleaser snapshots and a private single-replica Helm chart. Go is updated to 1.27.3. Snapshots/images/charts are built and validated locally without publishing or external deployment. See `docs/releases.md`, `docs/containers.md` and `charts/tado-bridge/README.md`.
 
 ## 1. Summary
 
