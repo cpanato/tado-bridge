@@ -45,9 +45,42 @@ CI uses a single GoReleaser snapshot job for every binary and container build; i
 
 GitHub controls the generated notes and supports optional repository customization through `.github/release.yml`; no separate GoReleaser changelog groups, sorting or filters are configured. See [GoReleaser's native changelog documentation](https://goreleaser.com/customization/publish/changelog/).
 
+## Cosign signatures
+
+The packaging CI job and release job install cosign using `sigstore/cosign-installer` with no inputs or overrides. The release job obtains its signing identity through GitHub OIDC; there is no stored signing key or password and no custom Sigstore configuration. Snapshot CI keeps `--skip=publish,sign`, so pull requests do not request signing identities, contact Sigstore for signing or upload image signatures.
+
+GoReleaser signs each application binary before archiving and publishes its verification bundle as `tado-bridge_<os>_<arch>.sigstore.json`. Only build ID `binary` is selected; the synthetic helper is excluded. It also signs `checksums.txt`, producing `checksums.txt.sigstore.json`. These bundles contain the signature, signing certificate and transparency verification material. The tar archives remain covered by the signed checksum list.
+
+The ko multi-platform image manifest is signed at its immutable digest, and cosign stores that signature in GHCR. Signing runs during the real tagged release; a local snapshot build does not prove that GitHub OIDC or registry signing will succeed.
+
+After downloading the release assets, verify the checksum bundle against the exact workflow/tag identity before checking archive hashes:
+
+```sh
+version=v1.2.3 # Replace with the release tag you downloaded.
+identity="https://github.com/cpanato/tado-bridge/.github/workflows/release.yaml@refs/tags/${version}"
+issuer=https://token.actions.githubusercontent.com
+
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity "$identity" --certificate-oidc-issuer "$issuer" \
+  checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+
+# Optional: verify the extracted Linux amd64 executable directly.
+cosign verify-blob --bundle tado-bridge_linux_amd64.sigstore.json \
+  --certificate-identity "$identity" --certificate-oidc-issuer "$issuer" \
+  ./tado-bridge
+
+# Replace <digest> with the full sha256 digest of the published image manifest.
+cosign verify --certificate-identity "$identity" \
+  --certificate-oidc-issuer "$issuer" \
+  'ghcr.io/cpanato/tado-bridge@sha256:<digest>'
+```
+
+See the official [GoReleaser cosign integration](https://goreleaser.com/customization/sign/sign/#signing-with-cosign) and [installer defaults](https://github.com/sigstore/cosign-installer).
+
 ## Publishing authorization
 
-The `.github/workflows/release.yaml` workflow runs when an operator pushes a `v*` tag to `cpanato/tado-bridge`. It checks out the full history, installs stable Go, runs race tests and module verification, validates GoReleaser configuration and publishes the tagged GitHub release and GHCR image with the repository-provided `GITHUB_TOKEN`. Only its release job has `contents: write` and `packages: write`; it has no deployment or OIDC permissions. Concurrent runs for the same tag are serialized without cancelling an active publication. GoReleaser validates the version tag; prerelease versions are marked as GitHub prereleases.
+The `.github/workflows/release.yaml` workflow runs when an operator pushes a `v*` tag to `cpanato/tado-bridge`. It checks out the full history, installs stable Go and cosign, validates GoReleaser configuration and publishes the tagged GitHub release and GHCR image with the repository-provided `GITHUB_TOKEN`. Only its release job has `contents: write` and `packages: write`; it also has `id-token: write` for keyless cosign signing and no deployment permission. Concurrent runs for the same tag are serialized without cancelling an active publication. GoReleaser validates the version tag; prerelease versions are marked as GitHub prereleases.
 
 Before pushing a release tag, select an authorized version and a merged commit with passing CI. Create/sign the SemVer tag with the operator’s configured identity, then push that specific tag to trigger publication. A merge or ordinary branch push does not publish. Re-running the workflow can modify release artifacts and image tags, so review a failed run before retrying.
 
