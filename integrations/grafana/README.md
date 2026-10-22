@@ -27,7 +27,7 @@ export HISTORY_POSTGRES_PASSWORD="$(openssl rand -hex 24)"
 export GRAFANA_DB_PASSWORD="$(openssl rand -hex 24)"
 export GRAFANA_ADMIN_PASSWORD="$(openssl rand -hex 24)"
 
-python3 scripts/prepare-observability.py "$OBSERVABILITY_DIR"
+go run ./internal/testutil/cmd/observability prepare "$OBSERVABILITY_DIR"
 make image
 export COMPOSE_FILE=compose.yaml:compose.history.yaml:compose.observability.yaml
 
@@ -56,12 +56,12 @@ To validate the optional stack or regenerate the image:
 make release-snapshot
 make observability-smoke
 # Keep a validated synthetic stack running for interactive review:
-python3 scripts/observability-smoke.py --keep
+go run ./internal/testutil/cmd/observability smoke --keep
 # Optional screenshot requires Node 22+ and a local Chrome installation.
 make observability-screenshot
 ```
 
-With `--keep`, the command prints the dashboard URL and a private `preview-state.json` path containing its generated demo login. Stop that specific preview with `python3 scripts/observability-smoke.py --stop /path/to/preview-state.json`. Ordinary tests still clean up automatically, including on failure. A retained preview seeds data once; collection age grows while it stays running.
+With `--keep`, the command prints the dashboard URL and a private `preview-state.json` path containing its generated demo login. Stop that specific preview with `go run ./internal/testutil/cmd/observability stop /path/to/preview-state.json`. Ordinary tests still clean up automatically, including on failure. A retained preview seeds data once; collection age grows while it stays running.
 
 `NODE` and `CHROME_BIN` can select those local tools. Capture uses Chrome's DevTools Protocol and Node's built-in WebSocket; there is no npm or browser dependency in the application or ordinary CI. The test starts a uniquely named Compose project with random loopback ports, synthetic secrets and temporary state. It seeds the test-only fixture, checks all 11 Grafana panel queries and authenticated Prometheus scrapes, verifies that Grafana's database role cannot write, and removes only its own containers, volume and state afterward. It never reads your OAuth file or uses the normal `serve` command. The screenshot source is the same importable JSON template, with only the data-source UIDs mapped for provisioning.
 

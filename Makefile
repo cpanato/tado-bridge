@@ -74,7 +74,8 @@ image-smoke:
 .PHONY: trmnl-package
 trmnl-package:
 	mkdir -p bin
-	cd integrations/trmnl && python3 -m zipfile -c ../../bin/tado-bridge-trmnl.zip settings.yml full.liquid half_horizontal.liquid half_vertical.liquid quadrant.liquid
+	rm -f bin/tado-bridge-trmnl.zip
+	cd integrations/trmnl && zip ../../bin/tado-bridge-trmnl.zip settings.yml full.liquid half_horizontal.liquid half_vertical.liquid quadrant.liquid
 
 .PHONY: compose-smoke
 compose-smoke:
@@ -84,9 +85,12 @@ compose-smoke:
 chart-integration:
 	./scripts/chart-integration.sh
 
-.PHONY: observability-smoke observability-screenshot
+.PHONY: observability-prepare observability-smoke observability-screenshot
+observability-prepare:
+	$(GO) run ./internal/testutil/cmd/observability prepare "$(OBSERVABILITY_DIR)"
+
 observability-smoke:
-	python3 scripts/observability-smoke.py
+	$(GO) run ./internal/testutil/cmd/observability smoke
 
 observability-screenshot:
-	python3 scripts/observability-smoke.py --screenshot docs/images/grafana/dashboard.png
+	$(GO) run ./internal/testutil/cmd/observability smoke --screenshot docs/images/grafana/dashboard.png

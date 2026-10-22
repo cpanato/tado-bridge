@@ -31,8 +31,8 @@ services:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./integrations/grafana/compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/api-token:/run/secrets/api-token:ro"
-      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/prometheus:/prometheus"
+      - "${OBSERVABILITY_DIR:?Run make observability-prepare first}/api-token:/run/secrets/api-token:ro"
+      - "${OBSERVABILITY_DIR:?Run make observability-prepare first}/prometheus:/prometheus"
     networks: [default, observability]
     depends_on: [tado-bridge]
     healthcheck:
@@ -62,8 +62,8 @@ services:
       - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - ./integrations/grafana/compose/provisioning:/etc/grafana/provisioning:ro
-      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/dashboards:/var/lib/tado-bridge-dashboards:ro"
-      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/grafana:/var/lib/grafana"
+      - "${OBSERVABILITY_DIR:?Run make observability-prepare first}/dashboards:/var/lib/tado-bridge-dashboards:ro"
+      - "${OBSERVABILITY_DIR:?Run make observability-prepare first}/grafana:/var/lib/grafana"
     tmpfs: [/tmp]
     networks: [default, observability, history]
     depends_on:

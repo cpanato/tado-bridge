@@ -28,7 +28,7 @@ You can test without physical hardware using a [TRMNL virtual device](https://he
 Build an import ZIP locally without publishing it:
 
 ```sh
-make trmnl-package
+make trmnl-package # Requires the zip command.
 # Import bin/tado-bridge-trmnl.zip in TRMNL.
 ```
 
