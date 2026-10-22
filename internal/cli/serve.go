@@ -12,6 +12,7 @@ import (
 	"github.com/cpanato/tado-bridge/internal/collector"
 	"github.com/cpanato/tado-bridge/internal/credentials"
 	"github.com/cpanato/tado-bridge/internal/domain"
+	"github.com/cpanato/tado-bridge/internal/history"
 	"github.com/cpanato/tado-bridge/internal/httpapi"
 	"github.com/cpanato/tado-bridge/internal/integrations/trmnl"
 	"github.com/cpanato/tado-bridge/internal/metrics"
@@ -43,10 +44,23 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 	var exporter *metrics.Exporter
 	var metricsHandler http.Handler
 	var observe func(error)
+	var observeHistory func(error)
 	if config.MetricsEnabled {
-		exporter = metrics.New(cache, nil)
+		exporter = metrics.New(cache, nil, metrics.Options{RoomDetails: config.MetricsRoomDetails})
 		metricsHandler = exporter.Handler()
 		observe = exporter.ObserveCollection
+		observeHistory = exporter.ObserveHistory
+	}
+	var historical history.Reader
+	var saveHistory func(context.Context, domain.Snapshot) error
+	if config.HistoryDatabaseURL != "" {
+		database, err := history.Open(cmd.Context(), config.HistoryDatabaseURL, config.HistoryRetention)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = database.Close() }()
+		historical, saveHistory = database, database.Save
+		logger.Info("PostgreSQL history enabled", "retention", config.HistoryRetention)
 	}
 	read := func(ctx context.Context) (domain.Snapshot, int, error) {
 		apiBefore, oauthBefore := client.APIRequests, client.OAuthRequests
@@ -63,7 +77,7 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 		// Reserve a refresh on every future cycle, even when the current token was valid.
 		return snapshot, api + max(oauth, 1), err
 	}
-	poller, err := collector.New(read, cache, collector.Options{Interval: config.PollInterval, Budget: budget, Logger: logger, ObserveCollection: observe})
+	poller, err := collector.New(read, cache, collector.Options{Interval: config.PollInterval, Budget: budget, Logger: logger, ObserveCollection: observe, SaveHistory: saveHistory, ObserveHistory: observeHistory})
 	if err != nil {
 		return err
 	}
@@ -72,7 +86,7 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 		return err
 	}
 	logger.Info("HTTP service started", "listen", listener.Addr().String(), "requested_poll_interval", config.PollInterval, "request_budget", config.DailyBudget)
-	handler := httpapi.New(cache, httpapi.Options{MaxSnapshotAge: config.MaxSnapshotAge, APIToken: config.APIToken, MetricsHandler: metricsHandler})
+	handler := httpapi.New(cache, httpapi.Options{MaxSnapshotAge: config.MaxSnapshotAge, APIToken: config.APIToken, MetricsHandler: metricsHandler, History: historical})
 	if trmnlConfig.Enabled {
 		publisher := trmnl.New(trmnlConfig, cache, config.MaxSnapshotAge, logger)
 		return service.Run(cmd.Context(), listener, handler, poller.Run, publisher.Run)

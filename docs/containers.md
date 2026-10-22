@@ -51,3 +51,11 @@ make image-multiarch
 The separate version-tag release workflow publishes `ghcr.io/cpanato/tado-bridge:<tag>` for Linux amd64/arm64; stable versions also update `latest`. See [release operation](releases.md). Compose defaults remain local, and its `pull_policy: never` requires an image to be built or pulled separately before use.
 
 For Kubernetes packaging, see the [Helm chart](../charts/tado-bridge/README.md). It requires a preinitialized writable credentials PVC and existing token Secret, fixes one replica with Recreate updates and exposes only a ClusterIP Service. No cluster deployment is performed by the local build commands.
+
+## Optional PostgreSQL history
+
+The normal Compose service has no database dependency. Pass `HISTORY_DATABASE_URL` for an existing database, or combine `compose.yaml` with `compose.history.yaml` to start a private PostgreSQL container and persistent named volume with no host database port. See [history setup](history.md#local-compose) for password handling and startup commands. The PostgreSQL overlay is separate from the default image/Compose smoke checks.
+
+## Optional local observability
+
+Add `compose.observability.yaml` alongside the base and history files to run Prometheus and Grafana on host loopback, with authenticated scrapes, automatic dashboard provisioning and read-only PostgreSQL access for Grafana. This overlay is optional and requires a prepared private state directory and separate passwords. See [setup and screenshot](../integrations/grafana/README.md#optional-local-compose-stack).

@@ -36,7 +36,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("usage: tadofake prepare DIR | serve | check")
+		return errors.New("usage: tadofake prepare DIR | serve | check | preview | preview-healthcheck")
 	}
 	switch os.Args[1] {
 	case "prepare":
@@ -46,6 +46,16 @@ func run() error {
 		return prepare(os.Args[2])
 	case "serve":
 		return serve()
+	case "preview":
+		if len(os.Args) != 2 {
+			return errors.New("preview accepts no arguments")
+		}
+		return preview()
+	case "preview-healthcheck":
+		if len(os.Args) != 2 {
+			return errors.New("preview-healthcheck accepts no arguments")
+		}
+		return previewHealthcheck("http://127.0.0.1:8080/readyz")
 	case "check":
 		expectedOAuth := 1
 		if len(os.Args) == 3 && os.Args[2] == "--reused-token" {

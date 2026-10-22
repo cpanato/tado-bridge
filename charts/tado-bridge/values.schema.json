@@ -8,7 +8,8 @@
     "secrets",
     "config",
     "trmnl",
-    "service"
+    "service",
+    "history"
   ],
   "properties": {
     "nameOverride": {
@@ -123,7 +124,8 @@
         "pollInterval",
         "maxSnapshotAge",
         "dailyRequestBudget",
-        "metricsEnabled"
+        "metricsEnabled",
+        "metricsRoomDetails"
       ],
       "properties": {
         "pollInterval": {
@@ -140,6 +142,9 @@
           "maximum": 1000000
         },
         "metricsEnabled": {
+          "type": "boolean"
+        },
+        "metricsRoomDetails": {
           "type": "boolean"
         }
       }
@@ -241,6 +246,33 @@
               "minLength": 1
             }
           }
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "existingSecret",
+        "databaseURLKey",
+        "retention"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingSecret": {
+          "type": "string",
+          "minLength": 1
+        },
+        "databaseURLKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retention": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }

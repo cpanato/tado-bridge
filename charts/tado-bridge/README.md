@@ -1,6 +1,6 @@
 # tado-bridge Helm chart
 
-This chart packages a single collector and its private cached HTTP API. It creates a Deployment and an optional **ClusterIP-only** Service, with no Ingress, LoadBalancer, NodePort, RBAC, autoscaler or public port. TRMNL is disabled by default. Rendering/packaging the chart does not deploy it.
+This chart packages a single collector and its private cached HTTP API. It creates a Deployment and an optional **ClusterIP-only** Service, with no Ingress, LoadBalancer, NodePort, RBAC, autoscaler or public port. History and TRMNL are disabled by default. Rendering/packaging the chart does not deploy it.
 
 ## Required runtime state
 
@@ -16,7 +16,7 @@ OAuth refresh saves a new token by atomic rename and creates a lock directory. A
 
 ## Local validation and packaging
 
-Requires Helm **4.3.1** (latest stable verified on 2026-10-20). No cluster access is used by these commands:
+Use a current stable Helm release. No cluster access is used by these commands:
 
 ```sh
 make helm-check
@@ -26,7 +26,7 @@ helm template local charts/tado-bridge > /tmp/tado-bridge-manifests.yaml
 
 The package is written under `dist/charts/`; this directory is ignored by Git. CI lints, renders, tests defaults/overrides/security boundaries and packages the chart. It also installs into a disposable Kind cluster using synthetic HTTPS tado APIs; see [integration checks](../../scripts/README.md#chart-deployment-integration). No chart is published.
 
-chart-testing discovers `ci/*-values.yaml` automatically. The current `ci/integration-values.yaml` selects the local snapshot, authenticated metrics and fixture CA Secret. The integration script supplies only the dynamic fake Service IP through an ignored overlay. `make helm-check` also validates the chart defaults, since chart-testing uses the CI values when present.
+chart-testing discovers `ci/*-values.yaml` automatically. The current `ci/integration-values.yaml` selects the local snapshot, authenticated metrics, PostgreSQL history and fixture CA Secret. The integration script supplies only the dynamic fake Service IP through an ignored overlay. `make helm-check` also validates the chart defaults, since chart-testing uses the CI values when present.
 
 For a later authorized install, prepare a private values file outside the repository with the actual existing claim/Secret names and node-accessible image. Preview the manifests first:
 
@@ -58,6 +58,10 @@ An existing namespace is assumed; the chart does not create one. Use cluster con
 | `config.maxSnapshotAge` | `2h` | Cache freshness threshold for readiness and TRMNL |
 | `config.dailyRequestBudget` | `90` | Process-local rolling upstream-attempt budget |
 | `config.metricsEnabled` | `false` | Optional authenticated cached metrics |
+| `config.metricsRoomDetails` | `false` | Opt into automatically discovered private room labels for Grafana gauges |
+| `history.enabled` | `false` | Optional external PostgreSQL history |
+| `history.existingSecret`, `history.databaseURLKey` | `tado-bridge-history`, `database-url` | Existing Secret containing the PostgreSQL URL |
+| `history.retention` | `2160h` | Retention in hours (90 days by default) |
 | `trmnl.enabled`, `trmnl.interval` | `false`, `30m` | Optional private-plugin publishing |
 | `trmnl.rooms` | `[]` | Explicit home/zone IDs and display aliases; required when enabled |
 | `secrets.trmnlWebhookKey` | `trmnl-webhook-url` | Secret key required only with TRMNL enabled |
@@ -67,3 +71,7 @@ Room selection IDs and aliases can be private even though they are not OAuth cre
 The pod runs as nonroot, drops capabilities, disables privilege escalation and service-account token mounting, uses RuntimeDefault seccomp and has a read-only root filesystem. Only the credentials volume is writable. Inside the pod, binding on `0.0.0.0:8080` is explicitly acknowledged and always uses the Secret-backed API token. ClusterIP is an internal cluster interface, not loopback; use trusted networking and your cluster's policy controls. This chart does not terminate inbound TLS or configure egress/network policies. Optional custom CA and hostname overrides require trusted configuration because they affect outbound TLS trust and routing.
 
 Startup/liveness probe `/healthz`; readiness probes `/readyz`. An upstream outage can make data stale and the pod unready without triggering restart loops. Resource defaults are starting points rather than measured sizing guarantees. Shutdown has 15 seconds to cancel/join requests and release credentials. The in-memory snapshot and rolling request-budget counter reset on restart; restarting does not reset tado's account-wide quota. Frequent restarts can discard pacing history, so keep headroom and observe actual account usage.
+
+## PostgreSQL history and Grafana
+
+Provision an external private PostgreSQL database with persistent storage and backups. Set `history.enabled=true` and select an existing Secret with the connection URL; the chart does not provision a database or additional history volume. Database initialization must succeed before HTTP serving starts. Runtime write/query failures do not affect cache readiness, and failed writes leave gaps. The application still runs one collector to protect OAuth rotation and request pacing. See [history configuration](../../docs/history.md#kubernetes) and the [Grafana template](../../integrations/grafana/README.md).

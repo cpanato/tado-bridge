@@ -1,31 +1,32 @@
 # tado-bridge — Technical design
 
-Status: implemented architecture and current scope. Version: 0.9. Updated: 2026-10-21.
+Status: implemented architecture and current scope. Version: 0.10. Updated: 2026-10-21.
 
 This document describes the code that exists today and the boundaries for future changes. Setup instructions are in the [README](../../README.md); operational details are in [service architecture](../architecture.md), [authentication](../authentication.md), [containers](../containers.md) and [releases](../releases.md).
 
 ## Scope
 
-`tado-bridge` is a read-only CLI and service for tado° V3/V3+ and X cloud APIs. It discovers homes/rooms, normalizes climate measurements, caches successful collections, and exposes a versioned JSON API. Prometheus metrics and TRMNL publishing are optional consumers of that cache.
+`tado-bridge` is a read-only CLI and service for tado° V3/V3+ and X cloud APIs. It discovers homes/rooms, normalizes climate measurements, caches successful collections, and exposes a versioned JSON API. PostgreSQL history, Prometheus metrics and TRMNL publishing are optional consumers of completed collections.
 
 The collector and domain model are independent of displays and dashboards. Multiple homes and mixed generations share the same normalized schema. No consumer can initiate an upstream read.
 
-The project does not implement thermostat controls, local Matter access, historical storage, a built-in dashboard, multi-user hosting, MQTT or generic outbound webhooks. New adapters should be added when there is a concrete need, without a generic plugin framework or a mandatory display dependency.
+The project does not implement thermostat controls, local Matter access, a built-in dashboard, multi-user hosting, MQTT or generic outbound webhooks. New adapters should be added when there is a concrete need, without a generic plugin framework or a mandatory display dependency.
 
 ## Architecture
 
-```text
- tado° cloud APIs
-       |
-       v
- [Client + OAuth] --> [Collector / normalizer] --> [Snapshot store]
-                                                       |
-                         +-----------------------------+------------------+
-                         |                             |                  |
-                         v                             v                  v
-                   Cached JSON API             Optional metrics     Optional TRMNL
-                         |                             |                  |
-                    Any client                    Prometheus        Private plugin
+```mermaid
+flowchart TD
+    Tado[tado cloud APIs] --> Client[Client and OAuth]
+    Client --> Collector[Collector and normalizer]
+    Collector --> Cache[Immutable snapshot cache]
+    Collector --> History[Optional PostgreSQL history]
+    Cache --> API[Cached JSON API]
+    Cache --> Metrics[Optional metrics]
+    Cache --> TRMNL[Optional TRMNL publisher]
+    History --> HistoryAPI[History JSON API]
+    History --> Grafana[Optional Grafana]
+    Metrics --> Prometheus
+    Prometheus --> Grafana
 ```
 
 | Package | Responsibility |
@@ -36,7 +37,8 @@ The project does not implement thermostat controls, local Matter access, histori
 | `internal/domain` | Provider-neutral discovery and measurement types |
 | `internal/collector` | Collection scheduling, rolling request budget and retries |
 | `internal/store` | Immutable serialized snapshot replacement and reads |
-| `internal/httpapi` | Cached JSON, health, readiness and API authentication |
+| `internal/httpapi` | Cached JSON, historical queries, health, readiness and API authentication |
+| `internal/history` | Optional PostgreSQL snapshots, retention and bounded historical reads |
 | `internal/metrics` | Optional bounded aggregates and process-local counters |
 | `internal/integrations/trmnl` | Optional selected-room payloads and webhook publishing |
 | `internal/service` | Runtime validation and coordinated shutdown |
@@ -53,7 +55,7 @@ Each zone includes measured/target temperature, humidity, heating activity and a
 
 An OFF room has no active target, even when upstream retains a setpoint. Heating activity reflects explicit upstream heating power above zero, without inferring it from temperature differences or claiming that a boiler is firing. `collected_at` is collection completion time; a sensor timestamp is retained only when upstream supplies it. Neither HTTP success nor collection time proves sensor freshness.
 
-Home and room identifiers are strings. Names and IDs remain private data even though they are not credentials. Metrics omit them; TRMNL uses IDs only for local selection and sends configured display aliases.
+Home and room identifiers are strings. Names and IDs remain private data even though they are not credentials. Default metrics omit them; room discovery explicitly opts into name/identifier labels. TRMNL uses IDs only for local selection and sends configured display aliases.
 
 ## CLI and authentication
 
@@ -88,11 +90,20 @@ Budget state resets with the process and excludes other clients. Restarting does
 | `/api/v1/snapshot` | 503 before the first successful collection; then 200 with the cached snapshot, even when stale |
 | `/healthz` | Process liveness, independent of upstream availability |
 | `/readyz` | 200 only when climate values exist and collection age is within `MAX_SNAPSHOT_AGE` |
-| `/metrics` | Optional cached Prometheus aggregates and request/collection counters |
+| `/metrics` | Optional cached Prometheus aggregates and request/collection/history-write counters |
+| `/api/v1/history` | Optional PostgreSQL history; authenticated bounded time windows and cursor pagination |
 
-The listener defaults to loopback. A non-loopback bind requires `ALLOW_NETWORK_EXPOSURE=true` and an API token. When configured, bearer authentication protects snapshots and metrics; health/readiness expose generic status without authentication. HTTP headers and connection lifetimes are bounded; upstream response reads have size limits.
+The listener defaults to loopback. A non-loopback bind requires `ALLOW_NETWORK_EXPOSURE=true` and an API token. When configured, bearer authentication protects snapshots, history and metrics; health/readiness expose generic status without authentication. HTTP headers and connection lifetimes are bounded; upstream response reads have size limits.
 
-Snapshots use RFC3339 UTC timestamps, explicit nulls and `Cache-Control: no-store`. Stale snapshots remain accessible with their original timestamp; readiness reports that they are too old. Metrics contain fixed labels only, omit unavailable aggregates and never trigger collection. See [metrics](../metrics.md).
+Snapshots use RFC3339 UTC timestamps, explicit nulls and `Cache-Control: no-store`. Stale snapshots remain accessible with their original timestamp; readiness reports that they are too old. Default metrics contain fixed labels only. Optional room discovery is capped at 128 rooms per snapshot. Metrics omit unavailable readings and never trigger collection. See [metrics](../metrics.md).
+
+## Optional history and Grafana
+
+Setting `HISTORY_DATABASE_URL` enables PostgreSQL persistence. Startup checks connectivity and creates the initial schema transactionally, using an advisory lock to serialize concurrent initialization. Every successful cache replacement is followed by an idempotent JSONB snapshot write and retention cleanup. The default retention is 90 days. History API queries exclude expired rows even before physical cleanup, accept at most 31 days per window and return newest-first pages bounded by count and bytes. Cursor keys use PostgreSQL microsecond precision without changing the original snapshot timestamps.
+
+Database initialization failures stop startup. Runtime operations have five-second deadlines; failed writes log sanitized errors and increment a fixed-label metric without invalidating the cache or retrying the provider. There is no durable retry queue, backfill or cache restoration. Historical queries have no upstream client. PostgreSQL remains external to the Helm chart; its connection URL comes from an existing Secret.
+
+The optional Grafana JSON template reads current aggregate or selected-room gauges from Prometheus and historical room series from a read-only PostgreSQL data source. It introduces no Grafana runtime dependency; per-room labels require a separate explicit opt-in. An optional local Compose overlay provisions Prometheus, Grafana and read-only database access, with loopback-only UI ports. See [history](../history.md) and the [dashboard template](../../integrations/grafana/README.md).
 
 ## TRMNL adapter
 
@@ -125,6 +136,8 @@ GoReleaser builds Linux/macOS binaries and multi-platform images. Snapshot CI do
 | TRMNL | Synthetic payload/layout tests, virtual-device checks and successful real-data webhook refreshes |
 | Continuous operation | Initial native day test accepted; uninterrupted 24-hour testing remains deferred |
 | Live V3/V3+ and physical TRMNL | Still require acceptance on suitable hardware/accounts |
-| Release signing | Configuration and synthetic pipeline checks; real OIDC/registry signing is exercised by a tagged release |
+| PostgreSQL history | Real PostgreSQL tests cover persistence, retention, pagination, cancellation and cache/API failure isolation; Kind fixture checks retention across pod replacement |
+| Grafana template | Metric references and all historical SQL queries checked against synthetic data; local Compose checks exercise real Grafana queries; synthetic browser screenshot documents the layout |
+| Release signing | v0.1.0 tag verified with gitsign; published binary/checksum/container cosign signatures verified |
 
-Account-wide quota sharing, provider availability and sensor timestamps remain upstream constraints. MQTT and other output adapters are possible extensions when needed; consumers should continue using immutable cached snapshots without taking ownership of the upstream client. Local Matter, controls and persistent history are not implemented.
+Account-wide quota sharing, provider availability and sensor timestamps remain upstream constraints. MQTT and other output adapters are possible extensions when needed; consumers should continue using immutable cached snapshots without taking ownership of the upstream client. Local Matter and thermostat controls are not implemented.

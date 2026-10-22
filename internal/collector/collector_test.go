@@ -1,8 +1,11 @@
 package collector
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +22,95 @@ func (e upstreamError) RetryAt() time.Time { return e.retry }
 func measured(at time.Time) domain.Snapshot {
 	value := 21.0
 	return domain.Snapshot{Provider: "fixture", CollectedAt: at, Homes: []domain.HomeReading{{ID: "1", Zones: []domain.ZoneReading{{TemperatureC: &value}}}}}
+}
+
+func TestHistoryFailureDoesNotRetryUpstreamOrInvalidateCache(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	cache := &store.Store{}
+	budget, _ := NewBudget(90, nil)
+	reads, writes, observations := 0, 0, 0
+	var log bytes.Buffer
+	interval := time.Hour
+	c, err := New(func(context.Context) (domain.Snapshot, int, error) {
+		reads++
+		if reads == 2 {
+			return domain.Snapshot{}, 1, errors.New("upstream failed")
+		}
+		return measured(time.Now()), 1, nil
+	}, cache, Options{
+		Interval: interval, Budget: budget,
+		Logger: slog.New(slog.NewTextHandler(&log, nil)),
+		SaveHistory: func(_ context.Context, snapshot domain.Snapshot) error {
+			writes++
+			view, ok := cache.Load()
+			if !ok || !view.CollectedAt.Equal(snapshot.CollectedAt) {
+				t.Fatal("history ran before cache replacement")
+			}
+			return upstreamError{} // Even temporary database errors cannot retry tado.
+		},
+		ObserveHistory: func(err error) {
+			if err == nil {
+				t.Fatal("lost history error")
+			}
+			observations++
+		},
+		ObserveCollection: func(err error) {
+			if reads == 1 && err != nil {
+				t.Fatal("database error invalidated collection")
+			}
+		},
+		Wait: func(ctx context.Context, delay time.Duration) error {
+			if delay != interval {
+				t.Fatalf("history error changed polling cadence: %v", delay)
+			}
+			if reads == 2 {
+				cancel()
+				return ctx.Err()
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Run(ctx)
+	if reads != 2 || writes != 1 || observations != 1 {
+		t.Fatalf("reads=%d writes=%d observations=%d", reads, writes, observations)
+	}
+	if _, ok := cache.Load(); !ok {
+		t.Fatal("history failure lost current data")
+	}
+	if !strings.Contains(log.String(), "history write failed") {
+		t.Fatal("missing history failure log")
+	}
+}
+
+func TestHistorySkipsInvalidSnapshotsAndSanitizesErrors(t *testing.T) {
+	for _, valid := range []bool{false, true} {
+		ctx, cancel := context.WithCancel(t.Context())
+		budget, _ := NewBudget(90, nil)
+		var log bytes.Buffer
+		writes := 0
+		c, _ := New(func(context.Context) (domain.Snapshot, int, error) {
+			if valid {
+				return measured(time.Now()), 1, nil
+			}
+			return domain.Snapshot{}, 1, nil
+		}, &store.Store{}, Options{Interval: time.Hour, Budget: budget,
+			Logger: slog.New(slog.NewTextHandler(&log, nil)),
+			SaveHistory: func(context.Context, domain.Snapshot) error {
+				writes++
+				return errors.New("postgres://PRIVATE:SECRET@host/db")
+			},
+			Wait: func(ctx context.Context, _ time.Duration) error { cancel(); return ctx.Err() },
+		})
+		_ = c.Run(ctx)
+		cancel()
+		if (writes == 1) != valid || strings.Contains(log.String(), "SECRET") || strings.Contains(log.String(), "PRIVATE") {
+			t.Fatal("invalid snapshot saved or driver error exposed")
+		}
+	}
 }
 
 func TestCollectorRetentionPacingAndRetryAfter(t *testing.T) {

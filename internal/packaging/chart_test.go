@@ -113,6 +113,31 @@ func TestChartPrivateSingletonAndWritableCredentials(t *testing.T) {
 	if env["TRMNL_ENABLED"]["value"] != "false" || env["TRMNL_WEBHOOK_URL"] != nil {
 		t.Fatal("TRMNL must be disabled by default")
 	}
+	if env["METRICS_ROOM_DETAILS"]["value"] != "false" {
+		t.Fatal("room labels require explicit opt-in")
+	}
+	if env["HISTORY_DATABASE_URL"] != nil || env["HISTORY_RETENTION"] != nil {
+		t.Fatal("history must be disabled by default")
+	}
+}
+
+func TestChartHistoryUsesExistingSecret(t *testing.T) {
+	docs := render(t, "--set", "history.enabled=true", "--set", "history.existingSecret=private-history", "--set", "history.databaseURLKey=connection-url", "--set", "history.retention=720h")
+	for _, doc := range docs {
+		if doc["kind"] != "Deployment" {
+			continue
+		}
+		pod := object(t, doc, "spec", "template", "spec")
+		container := pod["containers"].([]any)[0].(map[string]any)
+		env := environment(container)
+		ref := object(t, env["HISTORY_DATABASE_URL"], "valueFrom", "secretKeyRef")
+		if ref["name"] != "private-history" || ref["key"] != "connection-url" || env["HISTORY_RETENTION"]["value"] != "720h" {
+			t.Fatal("history must use the selected Secret and retention")
+		}
+		if len(pod["volumes"].([]any)) != 1 {
+			t.Fatal("PostgreSQL storage belongs to the external database")
+		}
+	}
 }
 func environment(container map[string]any) map[string]map[string]any {
 	env := make(map[string]map[string]any)
@@ -145,7 +170,7 @@ func TestChartRejectsUnsafeOrIncompleteValues(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("Helm is required")
 	}
-	for _, values := range []string{"replicaCount=2", "service.type=LoadBalancer", "credentials.existingClaim=", "secrets.existingSecret=", "trmnl.enabled=true", "image.digest=invalid", "config.dailyRequestBudget=0"} {
+	for _, values := range []string{"replicaCount=2", "service.type=LoadBalancer", "credentials.existingClaim=", "secrets.existingSecret=", "trmnl.enabled=true", "image.digest=invalid", "config.dailyRequestBudget=0", "history.existingSecret=", "history.databaseURLKey=", "history.retention=", "config.metricsRoomDetails=true"} {
 		t.Run(values, func(t *testing.T) {
 			if err := exec.Command("helm", "template", "test", filepath.Join("..", "..", "charts", "tado-bridge"), "--set", values).Run(); err == nil {
 				t.Fatal("unsafe or incomplete values accepted")

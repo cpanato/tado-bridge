@@ -6,28 +6,40 @@ import (
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/cpanato/tado-bridge/internal/history"
 )
 
 type Config struct {
-	ListenAddr     string
-	PollInterval   time.Duration
-	MaxSnapshotAge time.Duration
-	DailyBudget    int
-	APIToken       string
-	MetricsEnabled bool
+	ListenAddr         string
+	PollInterval       time.Duration
+	MaxSnapshotAge     time.Duration
+	DailyBudget        int
+	APIToken           string
+	MetricsEnabled     bool
+	MetricsRoomDetails bool
+	HistoryDatabaseURL string
+	HistoryRetention   time.Duration
 }
 
 // LoadConfig accepts literal bind addresses, resolving localhost to loopback
 // without DNS. Non-loopback binds require explicit opt-in and authentication.
 func LoadConfig(getenv func(string) string) (Config, error) {
 	config := Config{ListenAddr: "127.0.0.1:8080", PollInterval: 30 * time.Minute, MaxSnapshotAge: 2 * time.Hour, DailyBudget: 90, APIToken: getenv("API_TOKEN")}
+	config.HistoryDatabaseURL = getenv("HISTORY_DATABASE_URL")
+	config.HistoryRetention = history.DefaultRetention
+	if config.HistoryDatabaseURL != "" {
+		if err := history.ValidateURL(config.HistoryDatabaseURL); err != nil {
+			return Config{}, err
+		}
+	}
 	if value := getenv("LISTEN_ADDR"); value != "" {
 		config.ListenAddr = value
 	}
 	for _, item := range []struct {
 		name   string
 		target *time.Duration
-	}{{"POLL_INTERVAL", &config.PollInterval}, {"MAX_SNAPSHOT_AGE", &config.MaxSnapshotAge}} {
+	}{{"POLL_INTERVAL", &config.PollInterval}, {"MAX_SNAPSHOT_AGE", &config.MaxSnapshotAge}, {"HISTORY_RETENTION", &config.HistoryRetention}} {
 		if value := getenv(item.name); value != "" {
 			parsed, err := time.ParseDuration(value)
 			if err != nil || parsed <= 0 {
@@ -35,6 +47,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 			}
 			*item.target = parsed
 		}
+	}
+	if config.HistoryRetention < 24*time.Hour || config.HistoryRetention > 3650*24*time.Hour {
+		return Config{}, errors.New("HISTORY_RETENTION must be between 24h and 87600h")
 	}
 	if config.PollInterval < 5*time.Minute {
 		return Config{}, errors.New("POLL_INTERVAL must be at least 5m")
@@ -58,6 +73,13 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	config.MetricsEnabled, err = boolean(getenv, "METRICS_ENABLED")
 	if err != nil {
 		return Config{}, err
+	}
+	config.MetricsRoomDetails, err = boolean(getenv, "METRICS_ROOM_DETAILS")
+	if err != nil {
+		return Config{}, err
+	}
+	if config.MetricsRoomDetails && !config.MetricsEnabled {
+		return Config{}, errors.New("METRICS_ROOM_DETAILS requires METRICS_ENABLED=true")
 	}
 	host, port, err := net.SplitHostPort(config.ListenAddr)
 	if err != nil {

@@ -1,0 +1,82 @@
+# Optional: combine with compose.yaml and compose.history.yaml.
+# Prepare OBSERVABILITY_DIR first; all three services use the host's nonroot UID.
+services:
+  tado-bridge:
+    environment:
+      METRICS_ENABLED: "true"
+      # Explicit opt-in: discover names for the private Grafana room selector.
+      METRICS_ROOM_DETAILS: "true"
+    networks:
+      - default
+      - history
+      - observability
+
+  postgres:
+    environment:
+      GRAFANA_DB_PASSWORD: "${GRAFANA_DB_PASSWORD:?Set GRAFANA_DB_PASSWORD}"
+    volumes:
+      - ./integrations/grafana/compose/init-reader.sh:/docker-entrypoint-initdb.d/20-grafana-reader.sh:ro
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    user: "${TADO_BRIDGE_UID:?Set TADO_BRIDGE_UID to your nonroot UID}:${TADO_BRIDGE_GID:?Set TADO_BRIDGE_GID to your GID}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./integrations/grafana/compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/api-token:/run/secrets/api-token:ro"
+      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/prometheus:/prometheus"
+    networks: [default, observability]
+    depends_on: [tado-bridge]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:9090/-/ready]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    user: "${TADO_BRIDGE_UID:?Set TADO_BRIDGE_UID to your nonroot UID}:${TADO_BRIDGE_GID:?Set TADO_BRIDGE_GID to your GID}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}"
+      GRAFANA_DB_PASSWORD: "${GRAFANA_DB_PASSWORD:?Set GRAFANA_DB_PASSWORD}"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_LOG_MODE: console
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./integrations/grafana/compose/provisioning:/etc/grafana/provisioning:ro
+      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/dashboards:/var/lib/tado-bridge-dashboards:ro"
+      - "${OBSERVABILITY_DIR:?Run scripts/prepare-observability.py first}/grafana:/var/lib/grafana"
+    tmpfs: [/tmp]
+    networks: [default, observability, history]
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:3000/api/health]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+networks:
+  observability:
+    internal: true

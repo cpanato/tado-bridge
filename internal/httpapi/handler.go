@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cpanato/tado-bridge/internal/history"
 	"github.com/cpanato/tado-bridge/internal/store"
 )
 
@@ -17,6 +18,7 @@ type Options struct {
 	APIToken       string
 	Now            func() time.Time
 	MetricsHandler http.Handler
+	History        history.Reader
 }
 
 func New(cache *store.Store, options Options) http.Handler {
@@ -74,6 +76,24 @@ func New(cache *store.Store, options Options) http.Handler {
 			}
 			w.Header().Set("Cache-Control", "no-store")
 			options.MetricsHandler.ServeHTTP(w, r)
+		})
+	}
+	if options.History != nil {
+		mux.HandleFunc("/api/v1/history", func(w http.ResponseWriter, r *http.Request) {
+			if !get(w, r) || !authenticate(w, r, options.APIToken) {
+				return
+			}
+			query, err := historyQuery(r)
+			if err != nil {
+				failure(w, http.StatusBadRequest, "invalid_history_query", "Use RFC3339 from/to, a range of at most 31 days and limit between 1 and 100.")
+				return
+			}
+			page, err := options.History.Query(r.Context(), query)
+			if err != nil {
+				failure(w, http.StatusServiceUnavailable, "history_unavailable", "Historical data is temporarily unavailable.")
+				return
+			}
+			respond(w, http.StatusOK, page)
 		})
 	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

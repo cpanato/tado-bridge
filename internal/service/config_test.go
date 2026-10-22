@@ -11,7 +11,7 @@ func TestConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.ListenAddr != "127.0.0.1:8080" || config.PollInterval != 30*time.Minute || config.MaxSnapshotAge != 2*time.Hour || config.DailyBudget != 90 {
+	if config.ListenAddr != "127.0.0.1:8080" || config.PollInterval != 30*time.Minute || config.MaxSnapshotAge != 2*time.Hour || config.DailyBudget != 90 || config.HistoryDatabaseURL != "" || config.HistoryRetention != 90*24*time.Hour {
 		t.Fatalf("defaults: %+v", config)
 	}
 	for _, tc := range []struct {
@@ -37,6 +37,15 @@ func TestConfig(t *testing.T) {
 		{"token whitespace", map[string]string{"API_TOKEN": "secret value"}, false},
 		{"metrics enabled", map[string]string{"METRICS_ENABLED": "true"}, true},
 		{"invalid metrics boolean", map[string]string{"METRICS_ENABLED": "invalid"}, false},
+		{"room discovery enabled", map[string]string{"METRICS_ENABLED": "true", "METRICS_ROOM_DETAILS": "true"}, true},
+		{"room discovery without metrics", map[string]string{"METRICS_ROOM_DETAILS": "true"}, false},
+		{"invalid room discovery boolean", map[string]string{"METRICS_ROOM_DETAILS": "invalid"}, false},
+		{"history enabled", map[string]string{"HISTORY_DATABASE_URL": "postgres://localhost/test?sslmode=disable"}, true},
+		{"history requires explicit TLS policy", map[string]string{"HISTORY_DATABASE_URL": "postgres://user:secret-value@localhost/test"}, false},
+		{"history invalid duration", map[string]string{"HISTORY_RETENTION": "secret-value"}, false},
+		{"history short retention", map[string]string{"HISTORY_RETENTION": "23h"}, false},
+		{"history long retention", map[string]string{"HISTORY_RETENTION": "87601h"}, false},
+		{"history valid retention", map[string]string{"HISTORY_RETENTION": "720h"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := LoadConfig(func(name string) string { return tc.env[name] })

@@ -1,8 +1,8 @@
 # Service architecture and operation
 
-`tado-bridge serve` runs one collector and an HTTP server. The collector owns the tado client, counts requests and refreshes credentials when needed. Provider DTOs are normalized before entering the store. HTTP handlers have access only to the store; consumers cannot trigger upstream reads.
+`tado-bridge serve` runs one collector and an HTTP server. The collector owns the tado client, counts requests and refreshes credentials when needed. Provider DTOs are normalized before entering the store. HTTP handlers access only the cache and optional history reader; consumers cannot trigger upstream reads.
 
-The in-memory store holds one serialized snapshot, limited to 4 MiB. A successful collection is serialized before atomic replacement. Encoding/size failures and upstream errors preserve the previous snapshot. Input objects and returned byte slices cannot mutate the cached copy. Nothing from the snapshot is written to disk.
+The in-memory store holds one serialized snapshot, limited to 4 MiB. A successful collection is serialized before atomic replacement. Encoding/size failures and upstream errors preserve the previous snapshot. Input objects and returned byte slices cannot mutate the cached copy. Snapshots are persisted only when PostgreSQL history is explicitly enabled.
 
 ## Scheduling and quota
 
@@ -29,12 +29,13 @@ The listener defaults to `127.0.0.1:8080`. HTTP has bounded header size and head
 | GET route | Behavior |
 |---|---|
 | `/api/v1/snapshot` | Latest cached snapshot; 503 with a structured JSON error before the first successful collection |
+| `/api/v1/history` | Optional PostgreSQL history; authenticated, bounded and paginated; 404 when disabled |
 | `/healthz` | 200 while the HTTP process is running, including upstream outages |
 | `/readyz` | 200 if the cache has at least one climate value and its collection age is within `MAX_SNAPSHOT_AGE`; otherwise 503 |
 
 Data remain available through the snapshot endpoint with status 200 when stale. Consumers check `collected_at`; readiness independently reports staleness. A snapshot with no homes or no available climate fields can be cached but is not ready. Collection age is not sensor age: existing `temperature_measured_at` remains null if upstream does not supply a timestamp.
 
-Only GET is accepted. JSON responses use `application/json` and `Cache-Control: no-store`. When `API_TOKEN` is set, the snapshot route requires `Authorization: Bearer <token>`. Authentication uses a constant-time comparison; errors never reflect token values. Health/readiness remain unauthenticated for internal monitoring. When `METRICS_ENABLED=true`, `/metrics` uses the same authentication and exports cached climate aggregates and process-local collection/request counters. It never receives a provider client or triggers upstream requests. No home/room names or IDs become labels. See [metrics](metrics.md).
+Only GET is accepted. JSON responses use `application/json` and `Cache-Control: no-store`. When `API_TOKEN` is set, the snapshot and enabled history routes require `Authorization: Bearer <token>`. Authentication uses a constant-time comparison; errors never reflect token values. Health/readiness remain unauthenticated for internal monitoring. When `METRICS_ENABLED=true`, `/metrics` uses the same authentication and exports cached climate aggregates and process-local collection/request counters. It never receives a provider client or triggers upstream requests. Home/room names and identifier fallbacks become labels only with the separate `METRICS_ROOM_DETAILS=true` opt-in, which enables automatic room discovery for the Grafana gauges. See [metrics](metrics.md).
 
 ## Lifecycle and boundaries
 
@@ -43,3 +44,7 @@ SIGINT/SIGTERM cancels waits and upstream HTTP requests, stops accepting HTTP tr
 The [optional TRMNL publisher](../integrations/trmnl/README.md) receives only the snapshot store. It runs as a separate background task, serializes bounded webhook sends and never obtains a tado client. Remote failures remain inside its retry loop; collection and REST continue normally. It is disabled by default and requires explicit room selection. Service shutdown cancels and joins the publisher along with the collector/server before releasing credentials.
 
 [Nonroot container packaging](containers.md) and runtime checks support local and Kubernetes operation. Real TRMNL sending requires an explicit runtime opt-in; releases and deployments require separate authorization. Future adapters consume cached snapshots and never obtain a provider client.
+
+## Optional persistent history
+
+The in-memory cache remains the current-data source. When `HISTORY_DATABASE_URL` is set, each successful collection also writes a normalized snapshot to PostgreSQL with configurable retention. Runtime database failures are isolated from current-data availability and never retry the provider; failed writes leave gaps. History queries and the Grafana template read the database without owning a tado client. See [history configuration and API](history.md) and [Grafana setup](../integrations/grafana/README.md).

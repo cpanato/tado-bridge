@@ -1,8 +1,8 @@
 apiVersion: v2
 name: tado-bridge
-description: Read-only tado collector with a private cached API and optional TRMNL publishing
+description: Read-only tado collector with optional PostgreSQL history, metrics and TRMNL publishing
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.0.0"
 home: https://github.com/cpanato/tado-bridge
 sources:
