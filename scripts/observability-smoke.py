@@ -96,7 +96,10 @@ def run(screenshot=None, keep=False):
     }
     env = dict(os.environ, **values)
     override = directory / "preview.json"
-    override.write_text(json.dumps({"services": {"tado-bridge": {"command": ["preview"], "healthcheck": {"disable": True}}}}))
+    override.write_text(json.dumps({"services": {"tado-bridge": {
+        "command": ["preview"],
+        "healthcheck": {"test": ["CMD", "/ko-app/tadofake", "preview-healthcheck"], "interval": "1s"},
+    }}}))
     compose = compose_command(directory, project)
     retained = False
 

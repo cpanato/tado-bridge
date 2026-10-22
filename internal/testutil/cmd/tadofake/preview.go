@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,6 +19,23 @@ import (
 	"github.com/cpanato/tado-bridge/internal/service"
 	"github.com/cpanato/tado-bridge/internal/store"
 )
+
+// The preview always uses port 8080 in its disposable Compose stack. Probe only
+// local readiness, without credentials, proxies or redirects.
+func previewHealthcheck(address string) error {
+	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	response, err := client.Get(address)
+	if err != nil {
+		return errors.New("preview readiness check failed")
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("preview readiness returned HTTP %d", response.StatusCode)
+	}
+	return nil
+}
 
 // preview is a test-only data source for the optional Compose stack. It never
 // loads OAuth credentials, creates a tado client or publishes to TRMNL.
