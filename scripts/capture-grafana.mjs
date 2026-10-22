@@ -1,4 +1,4 @@
-// Capture the actual Grafana UI from observability-smoke.py's disposable stack.
+// Capture the actual Grafana UI from the observability Go helper's disposable stack.
 // Uses Node's built-in WebSocket and the Chrome DevTools Protocol; no npm deps.
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, mkdir, writeFile, rm } from 'node:fs/promises';

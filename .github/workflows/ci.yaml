@@ -63,11 +63,6 @@ jobs:
           TEST_HISTORY_DATABASE_URL: postgres://tado_bridge_test:synthetic-ci-password@127.0.0.1:5432/tado_bridge_test?sslmode=disable
         run: go test -race -count=1 ./...
 
-      - name: Test private Compose configuration preparation
-        env:
-          PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 -m unittest discover -s scripts -p 'test_*.py'
-
       - name: Vet Go packages
         run: go vet ./...
 
@@ -147,7 +142,7 @@ jobs:
         run: ./scripts/compose-smoke.sh
 
       - name: Test optional Prometheus and Grafana with synthetic climate data
-        run: python3 scripts/observability-smoke.py
+        run: go run ./internal/testutil/cmd/observability smoke
 
       - name: Export snapshot images for chart tests
         run: |
@@ -196,6 +191,7 @@ jobs:
 
       - run: make helm-check helm-package
 
+      # Upstream chart-testing uses Python for chart validation tooling.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.x'
