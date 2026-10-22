@@ -1,0 +1,779 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus scraping tado-bridge /metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_POSTGRESQL",
+      "label": "PostgreSQL history",
+      "description": "Read-only access to the tado-bridge history database",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "id": null,
+  "uid": "tado-bridge",
+  "title": "tado-bridge — Indoor climate",
+  "description": "Current cached climate by automatically discovered room, aggregate means and PostgreSQL room history. Collection timestamps do not establish sensor freshness.",
+  "tags": [
+    "tado-bridge",
+    "climate"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Prometheus job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(tado_bridge_upstream_requests_total, job)",
+          "refId": "job"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "instance",
+        "label": "Instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(tado_bridge_upstream_requests_total{job=~\"${job:regex}\"}, instance)",
+          "refId": "instance"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "room",
+        "label": "Current room",
+        "description": "Select the room for the three current gauges. Historical graphs continue to compare all rooms.",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(tado_bridge_current_room_info{job=~\"${job:regex}\",instance=~\"${instance:regex}\"}, room)",
+          "refId": "room"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "All rooms (mean)",
+          "value": "All rooms (mean)"
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Current climate · $room",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "title": "Temperature · $room",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Cached reading for the selected room. All rooms (mean) averages available readings across the cache. Missing values remain unavailable; no extra tado requests are made.",
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tado_bridge_current_temperature_celsius{job=~\"${job:regex}\",instance=~\"${instance:regex}\",room=\"$room\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{room}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "noValue": "No data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": -10,
+          "max": 40,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": false,
+        "orientation": "auto",
+        "sizing": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75
+      }
+    },
+    {
+      "id": 3,
+      "title": "Target temperature · $room",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Cached reading for the selected room. All rooms (mean) averages available readings across the cache. Missing values remain unavailable; no extra tado requests are made.",
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tado_bridge_current_target_temperature_celsius{job=~\"${job:regex}\",instance=~\"${instance:regex}\",room=\"$room\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{room}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "noValue": "No data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": 0,
+          "max": 35,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": false,
+        "orientation": "auto",
+        "sizing": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75
+      }
+    },
+    {
+      "id": 4,
+      "title": "Humidity · $room",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Cached reading for the selected room. All rooms (mean) averages available readings across the cache. Missing values remain unavailable; no extra tado requests are made.",
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tado_bridge_current_humidity_percent{job=~\"${job:regex}\",instance=~\"${instance:regex}\",room=\"$room\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{room}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "No data",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": false,
+        "orientation": "auto",
+        "sizing": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "Collection and history health · Prometheus",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      }
+    },
+    {
+      "id": 6,
+      "title": "Scrape availability",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Whether Prometheus can scrape this instance; does not establish upstream or database health.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=~\"${job:regex}\",instance=~\"${instance:regex}\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{statistic}}{{kind}}{{result}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "noValue": "No data",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Collection age",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Age of the latest cached collection. Compare with your configured cadence and MAX_SNAPSHOT_AGE; sensor timestamps can be older.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "tado_bridge_snapshot_age_seconds{job=~\"${job:regex}\",instance=~\"${instance:regex}\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{statistic}}{{kind}}{{result}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "noValue": "No data",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "title": "Collection failures in range",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(tado_bridge_collection_errors_total{job=~\"${job:regex}\",instance=~\"${instance:regex}\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{statistic}}{{kind}}{{result}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "noValue": "No data",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "title": "History write failures in range",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Historical persistence failures. Zero with history disabled does not indicate that persistence is enabled. Failed writes leave gaps and do not invalidate the current cache.",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(tado_bridge_history_writes_total{job=~\"${job:regex}\",instance=~\"${instance:regex}\",result=\"error\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{statistic}}{{kind}}{{result}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "noValue": "No data",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Room history · PostgreSQL",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Measured temperature",
+      "description": "Completed collections grouped by the dashboard interval. Missing readings stay null; lines do not bridge null values. Heating activity is the mean active fraction in each bucket, not energy consumption.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "maxDataPoints": 1000,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(s.collected_at, $__interval),\n       concat(COALESCE(NULLIF(h->>'name', ''), h->>'id'), ' / ', COALESCE(NULLIF(z->>'name', ''), z->>'id'), ' [', h->>'id', '/', z->>'id', ']') AS metric,\n       avg((z->>'temperature_c')::double precision) AS value\nFROM tado_bridge_snapshots AS s\nCROSS JOIN LATERAL jsonb_array_elements(s.payload->'homes') AS h\nCROSS JOIN LATERAL jsonb_array_elements(h->'zones') AS z\nWHERE $__timeFilter(s.collected_at)\nGROUP BY 1, 2\nORDER BY 1, 2",
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "noValue": "No data",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Target temperature",
+      "description": "Completed collections grouped by the dashboard interval. Missing readings stay null; lines do not bridge null values. Heating activity is the mean active fraction in each bucket, not energy consumption.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "maxDataPoints": 1000,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(s.collected_at, $__interval),\n       concat(COALESCE(NULLIF(h->>'name', ''), h->>'id'), ' / ', COALESCE(NULLIF(z->>'name', ''), z->>'id'), ' [', h->>'id', '/', z->>'id', ']') AS metric,\n       avg((z->>'target_temperature_c')::double precision) AS value\nFROM tado_bridge_snapshots AS s\nCROSS JOIN LATERAL jsonb_array_elements(s.payload->'homes') AS h\nCROSS JOIN LATERAL jsonb_array_elements(h->'zones') AS z\nWHERE $__timeFilter(s.collected_at)\nGROUP BY 1, 2\nORDER BY 1, 2",
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "noValue": "No data",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Humidity",
+      "description": "Completed collections grouped by the dashboard interval. Missing readings stay null; lines do not bridge null values. Heating activity is the mean active fraction in each bucket, not energy consumption.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "maxDataPoints": 1000,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(s.collected_at, $__interval),\n       concat(COALESCE(NULLIF(h->>'name', ''), h->>'id'), ' / ', COALESCE(NULLIF(z->>'name', ''), z->>'id'), ' [', h->>'id', '/', z->>'id', ']') AS metric,\n       avg((z->>'humidity_percent')::double precision) AS value\nFROM tado_bridge_snapshots AS s\nCROSS JOIN LATERAL jsonb_array_elements(s.payload->'homes') AS h\nCROSS JOIN LATERAL jsonb_array_elements(h->'zones') AS z\nWHERE $__timeFilter(s.collected_at)\nGROUP BY 1, 2\nORDER BY 1, 2",
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "No data",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Heating activity",
+      "description": "Completed collections grouped by the dashboard interval. Missing readings stay null; lines do not bridge null values. Heating activity is the mean active fraction in each bucket, not energy consumption.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "maxDataPoints": 1000,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(s.collected_at, $__interval),\n       concat(COALESCE(NULLIF(h->>'name', ''), h->>'id'), ' / ', COALESCE(NULLIF(z->>'name', ''), z->>'id'), ' [', h->>'id', '/', z->>'id', ']') AS metric,\n       avg(CASE (z->>'heating_active')::boolean WHEN true THEN 1.0 WHEN false THEN 0.0 ELSE NULL END) AS value\nFROM tado_bridge_snapshots AS s\nCROSS JOIN LATERAL jsonb_array_elements(s.payload->'homes') AS h\nCROSS JOIN LATERAL jsonb_array_elements(h->'zones') AS z\nWHERE $__timeFilter(s.collected_at)\nGROUP BY 1, 2\nORDER BY 1, 2",
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "noValue": "No data",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": false,
+            "showPoints": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ]
+}
