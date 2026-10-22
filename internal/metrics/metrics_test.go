@@ -15,7 +15,7 @@ import (
 func TestMetricsFromCacheAndPrivacy(t *testing.T) {
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	cache := &store.Store{}
-	exporter := New(cache, func() time.Time { return now })
+	exporter := New(cache, func() time.Time { return now }, Options{})
 	scrape := func() string {
 		t.Helper()
 		response := httptest.NewRecorder()
@@ -38,6 +38,8 @@ func TestMetricsFromCacheAndPrivacy(t *testing.T) {
 	exporter.ObserveCollection(nil)
 	exporter.ObserveCollection(errors.New("PRIVATE-ERROR"))
 	exporter.ObserveRequests(3, 1)
+	exporter.ObserveHistory(nil)
+	exporter.ObserveHistory(errors.New("PRIVATE-ERROR"))
 	now = now.Add(90 * time.Minute)
 	result := scrape()
 	for _, sample := range []string{
@@ -51,6 +53,8 @@ func TestMetricsFromCacheAndPrivacy(t *testing.T) {
 		`tado_bridge_collections_total{result="error"} 1`,
 		`tado_bridge_upstream_requests_total{kind="api"} 3`,
 		`tado_bridge_upstream_requests_total{kind="oauth"} 1`,
+		`tado_bridge_history_writes_total{result="success"} 1`,
+		`tado_bridge_history_writes_total{result="error"} 1`,
 	} {
 		if !strings.Contains(result, sample) {
 			t.Fatalf("missing sample: %s", sample)
@@ -66,7 +70,7 @@ func TestMetricsFromCacheAndPrivacy(t *testing.T) {
 	for _, family := range families {
 		for _, metric := range family.Metric {
 			for _, label := range metric.Label {
-				if label.GetName() != "statistic" && label.GetName() != "kind" && label.GetName() != "result" {
+				if label.GetName() != "statistic" && label.GetName() != "kind" && label.GetName() != "result" && (label.GetName() != "room" || label.GetValue() != AllRooms) {
 					t.Fatal("unexpected high-cardinality label")
 				}
 			}
@@ -75,7 +79,7 @@ func TestMetricsFromCacheAndPrivacy(t *testing.T) {
 }
 
 func TestConcurrentMetrics(t *testing.T) {
-	exporter := New(&store.Store{}, nil)
+	exporter := New(&store.Store{}, nil, Options{})
 	var group sync.WaitGroup
 	for range 8 {
 		group.Go(func() {

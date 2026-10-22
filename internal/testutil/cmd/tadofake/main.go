@@ -46,6 +46,11 @@ func run() error {
 		return prepare(os.Args[2])
 	case "serve":
 		return serve()
+	case "preview":
+		if len(os.Args) != 2 {
+			return errors.New("preview accepts no arguments")
+		}
+		return preview()
 	case "check":
 		expectedOAuth := 1
 		if len(os.Args) == 3 && os.Args[2] == "--reused-token" {

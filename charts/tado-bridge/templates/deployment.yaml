@@ -1,6 +1,9 @@
 {{- if and .Values.trmnl.enabled (empty .Values.trmnl.rooms) -}}
 {{- fail "trmnl.rooms must explicitly select rooms when TRMNL is enabled" -}}
 {{- end -}}
+{{- if and .Values.config.metricsRoomDetails (not .Values.config.metricsEnabled) -}}
+{{- fail "config.metricsRoomDetails requires config.metricsEnabled=true" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -74,6 +77,17 @@ spec:
               value: {{ .Values.config.dailyRequestBudget | quote }}
             - name: METRICS_ENABLED
               value: {{ .Values.config.metricsEnabled | quote }}
+            - name: METRICS_ROOM_DETAILS
+              value: {{ .Values.config.metricsRoomDetails | quote }}
+            {{- if .Values.history.enabled }}
+            - name: HISTORY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.history.existingSecret | quote }}
+                  key: {{ .Values.history.databaseURLKey | quote }}
+            - name: HISTORY_RETENTION
+              value: {{ .Values.history.retention | quote }}
+            {{- end }}
             - name: TRMNL_ENABLED
               value: {{ .Values.trmnl.enabled | quote }}
             {{- if .Values.trmnl.enabled }}

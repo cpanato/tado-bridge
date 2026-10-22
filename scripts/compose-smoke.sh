@@ -14,8 +14,9 @@ fixture_dir="$(mktemp -d)"
 project="tado-bridge-compose-smoke-$$"
 # Override runtime settings so the caller's real tokens/webhook are never used.
 export TADO_CREDENTIALS_DIR="$fixture_dir"
-export TADO_BRIDGE_UID="$(id -u)"
-export TADO_BRIDGE_GID="$(id -g)"
+TADO_BRIDGE_UID="$(id -u)"
+TADO_BRIDGE_GID="$(id -g)"
+export TADO_BRIDGE_UID TADO_BRIDGE_GID
 export TADO_BRIDGE_IMAGE="${IMAGE:-ko.local/tado-bridge:local}"
 export API_TOKEN=synthetic-compose-token
 export TADO_BRIDGE_PORT=8080
@@ -23,6 +24,9 @@ export POLL_INTERVAL=30m
 export MAX_SNAPSHOT_AGE=2h
 export TADO_DAILY_REQUEST_BUDGET=90
 export METRICS_ENABLED=false
+export METRICS_ROOM_DETAILS=false
+export HISTORY_DATABASE_URL=
+export HISTORY_RETENTION=2160h
 export TRMNL_INTERVAL=30m
 export TRMNL_ENABLED=false
 export TRMNL_WEBHOOK_URL=

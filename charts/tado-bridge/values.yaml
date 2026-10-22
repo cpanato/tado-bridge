@@ -26,11 +26,19 @@ config:
   maxSnapshotAge: 2h
   dailyRequestBudget: 90
   metricsEnabled: false
+  metricsRoomDetails: false
 
 trmnl:
   enabled: false
   interval: 30m
   rooms: []
+
+# External PostgreSQL only. Connection URL stays in an existing Secret.
+history:
+  enabled: false
+  existingSecret: tado-bridge-history
+  databaseURLKey: database-url
+  retention: 2160h
 
 resources:
   requests:

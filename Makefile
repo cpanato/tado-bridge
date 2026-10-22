@@ -83,3 +83,10 @@ compose-smoke:
 .PHONY: chart-integration
 chart-integration:
 	./scripts/chart-integration.sh
+
+.PHONY: observability-smoke observability-screenshot
+observability-smoke:
+	python3 scripts/observability-smoke.py
+
+observability-screenshot:
+	python3 scripts/observability-smoke.py --screenshot docs/images/grafana/dashboard.png

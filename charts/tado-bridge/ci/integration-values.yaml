@@ -6,5 +6,9 @@ image:
   pullPolicy: Never
 config:
   metricsEnabled: true
+  metricsRoomDetails: true
+history:
+  enabled: true
+  existingSecret: tado-fixture-history
 tls:
   existingCASecret: tado-fixture-tls

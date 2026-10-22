@@ -40,3 +40,7 @@ REST endpoints require `Bearer fixture-access`. Unknown authenticated paths retu
 - `check --reused-token` performs the same checks after application restart and requires zero OAuth requests in the new process.
 
 GoReleaser builds its binary/image only for snapshots and excludes it from product archives. The fixture controls are unauthenticated test helpers: run only in disposable test environments, never with real tokens or as an exposed service. Production clients keep their official URLs; the isolated chart test uses pod host aliases and a test CA instead of adding production endpoint override flags.
+
+## Compose dashboard preview
+
+The snapshot-only `tadofake preview` command serves a synthetic cache, metrics and history API, with 24 hours of generated readings for eight generic rooms in a disposable PostgreSQL database. It uses the actual history writer, API handler and Prometheus exporter; it never constructs a tado client, reads OAuth credentials or publishes to TRMNL. `scripts/observability-smoke.py` supplies its private database URL, API token and bind configuration and owns cleanup. This preview path is for fixtures only and is not included in the production CLI or published image.

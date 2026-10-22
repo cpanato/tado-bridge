@@ -1,13 +1,14 @@
 # tado-bridge
 
-A read-only CLI and local service for tado° V3/V3+ and X. It collects indoor-climate readings and exposes a cached JSON API, with optional Prometheus metrics and TRMNL publishing. The collector works independently of any display or dashboard.
+A read-only CLI and local service for tado° V3/V3+ and X. It collects indoor-climate readings and exposes a cached JSON API, with optional PostgreSQL history, Prometheus metrics and TRMNL publishing. The collector works independently of any display or dashboard.
 
 ## What is available
 
 - Browser-based OAuth login, automatic token refresh, and home/room discovery, including accounts with mixed V3 and X homes.
 - One-shot or scheduled collection of temperature, target temperature, humidity and heating activity.
 - A local cached API with health/readiness endpoints, request budgeting and bounded retries.
-- Optional Prometheus metrics and selected-room publishing to a TRMNL private plugin.
+- Optional PostgreSQL history with retention and a paginated API.
+- Prometheus metrics, a Grafana dashboard template and selected-room publishing to a TRMNL private plugin.
 - Local Compose operation, a Helm chart, and GoReleaser builds for binaries and container images.
 
 ## Quick start
@@ -56,6 +57,7 @@ curl --fail http://127.0.0.1:8080/api/v1/snapshot
 | `/healthz` | Process liveness, including during upstream outages |
 | `/readyz` | 200 when cached climate readings are available and within the configured age limit; otherwise 503 |
 | `/metrics` | Optional Prometheus metrics; disabled by default |
+| `/api/v1/history` | Optional paginated PostgreSQL history; disabled by default |
 
 API reads never trigger tado° requests. A collection failure preserves the last good snapshot, including its original `collected_at`. The snapshot endpoint can therefore return stale data with HTTP 200; consumers must check timestamps or readiness.
 
@@ -74,11 +76,14 @@ Configuration uses environment variables:
 | `POLL_INTERVAL` | `30m` | Requested minimum collection delay; at least `5m` |
 | `MAX_SNAPSHOT_AGE` | `2h` | Freshness limit for readiness and TRMNL |
 | `TADO_DAILY_REQUEST_BUDGET` | `90` | Process-local rolling 24-hour cap on REST and OAuth attempts |
-| `API_TOKEN` | unset | Bearer token for snapshots and enabled metrics |
+| `API_TOKEN` | unset | Bearer token for snapshots, history and enabled metrics |
 | `ALLOW_NETWORK_EXPOSURE` | `false` | Required with `API_TOKEN` to bind outside loopback |
 | `METRICS_ENABLED` | `false` | Enable `/metrics` |
+| `METRICS_ROOM_DETAILS` | `false` | Discover room names for current per-room gauges; requires metrics |
+| `HISTORY_DATABASE_URL` | unset | Enable history with an explicit PostgreSQL URL and TLS policy |
+| `HISTORY_RETENTION` | `2160h` | History retention (90 days); between `24h` and `87600h` |
 
-When `API_TOKEN` is set, send `Authorization: Bearer <token>` to the snapshot and metrics endpoints. Health/readiness remain unauthenticated. Keep remote access behind trusted networking and an appropriate authentication/TLS boundary.
+When `API_TOKEN` is set, send `Authorization: Bearer <token>` to the snapshot, history and metrics endpoints. Health/readiness remain unauthenticated. Keep remote access behind trusted networking and an appropriate authentication/TLS boundary.
 
 The request budget can increase the configured polling interval. One X home needs three REST calls per collection; reserving an OAuth refresh gives an effective **64-minute interval** with the default budget. V3 homes need additional requests per zone, so their collection interval and freshness limit may need adjustment. HTTP 429 honors upstream reset deadlines; transient failures use bounded retries.
 
@@ -97,6 +102,16 @@ After configuring credentials and `API_TOKEN`, `make compose-up` builds the loca
 The [Helm chart](charts/tado-bridge/README.md) runs one collector with Recreate updates, an existing writable credentials PVC, existing Secrets and a ClusterIP-only Service. `make helm-check helm-package` validates and packages it without deploying.
 
 `make release-snapshot` builds Linux/macOS amd64/arm64 binaries and local Linux container images without publishing. The separate version-tag workflow publishes binaries, checksums and the multi-platform GHCR image, with native GitHub release notes and keyless cosign signatures. See [release operation and signature verification](docs/releases.md). Tags, releases and deployments require an explicit operator decision.
+
+## History and Grafana
+
+Set `HISTORY_DATABASE_URL` to enable PostgreSQL history. Successful collections are stored with their original readings and timestamps; no extra tado requests are made. Retention defaults to 90 days. PostgreSQL is optional, and runtime database failures leave the current cache and TRMNL available. See [history setup, API and failure behavior](docs/history.md), including the local Compose overlay and Kubernetes Secret configuration.
+
+The [Grafana template](integrations/grafana/README.md) combines current Prometheus gauges with an automatically populated room selector, collection health with PostgreSQL room history. Import its JSON into your own Grafana, or use the [optional local Compose stack](integrations/grafana/README.md#optional-local-compose-stack) to run Grafana and Prometheus with automatic dashboard provisioning.
+
+![Grafana dashboard with current metrics and eight synthetic room histories](docs/images/grafana/dashboard.png)
+
+Actual Grafana capture using synthetic data; no account or private home readings are included.
 
 ## TRMNL
 
@@ -127,7 +142,7 @@ These are browser renders using TRMNL's stylesheet. Final rendering and refresh 
 
 ## Scope and future work
 
-The current integration depends on tado° cloud access. It does not provide local Matter support, thermostat controls, a built-in dashboard, historical storage, MQTT or generic outbound webhooks. Additional consumers can use the cached JSON API without changing the collector.
+The current integration depends on tado° cloud access. It does not provide local Matter support, thermostat controls, a built-in dashboard, MQTT or generic outbound webhooks. Additional consumers can use the cached JSON API without changing the collector.
 
 MQTT and other output adapters are possible future extensions, driven by actual needs. Continuous 24-hour testing on an always-on host and acceptance with a physical TRMNL device remain follow-up validation work. The [design document](docs/design/tado-bridge-design.md) describes the architecture and current scope.
 
@@ -137,6 +152,6 @@ MQTT and other output adapters are possible future extensions, driven by actual 
 make check
 ```
 
-This runs race tests, vet, lint, vulnerability checks and module verification; golangci-lint is required. Tests use synthetic data and local servers, without real tado° credentials. Workflow changes should also pass `actionlint` and `zizmor --persona pedantic .github/workflows .github/dependabot.yml`.
+This runs race tests, vet, lint, vulnerability checks and module verification; golangci-lint is required. Tests use synthetic data and local servers, without real tado° credentials. PostgreSQL integration tests run when `TEST_HISTORY_DATABASE_URL` points to a disposable test database; CI always enables them. Workflow changes should also pass `actionlint` and `zizmor --persona pedantic .github/workflows .github/dependabot.yml`.
 
 The [packaging integration scripts](scripts/README.md) cover prebuilt images, Compose and chart installation in a disposable Kind cluster. Keep dependencies and build tools current, and verify updates against their official sources.

@@ -1,3 +1,92 @@
+# Disposable PostgreSQL for history integration, private to this Kind cluster.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tado-fixture-history
+  namespace: tado-bridge-ci
+type: Opaque
+stringData:
+  database-url: postgres://tado_bridge_test:synthetic-chart-password@history-postgres/tado_bridge_test?sslmode=disable
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: history-postgres
+  namespace: tado-bridge-ci
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: history-postgres
+  template:
+    metadata:
+      labels:
+        app: history-postgres
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:18.6-alpine
+          env:
+            - name: POSTGRES_USER
+              value: tado_bridge_test
+            - name: POSTGRES_DB
+              value: tado_bridge_test
+            - name: POSTGRES_PASSWORD
+              value: synthetic-chart-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, tado_bridge_test, -d, tado_bridge_test]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: socket
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: socket
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: history-postgres
+  namespace: tado-bridge-ci
+spec:
+  type: ClusterIP
+  selector:
+    app: history-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

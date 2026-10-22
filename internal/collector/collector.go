@@ -25,6 +25,8 @@ type Options struct {
 	Jitter            func(time.Duration) time.Duration
 	Logger            *slog.Logger
 	ObserveCollection func(error)
+	SaveHistory       func(context.Context, domain.Snapshot) error
+	ObserveHistory    func(error)
 }
 
 type Collector struct {
@@ -99,6 +101,16 @@ func (c *Collector) Run(ctx context.Context) error {
 		}
 		if c.options.ObserveCollection != nil {
 			c.options.ObserveCollection(err)
+		}
+		if err == nil && c.options.SaveHistory != nil {
+			historyErr := c.options.SaveHistory(ctx, snapshot)
+			if c.options.ObserveHistory != nil {
+				c.options.ObserveHistory(historyErr)
+			}
+			if historyErr != nil {
+				// Do not log driver errors: they may contain database credentials.
+				c.options.Logger.Error("history write failed; current snapshot remains available")
+			}
 		}
 		cadence := max(c.options.Interval, c.options.Budget.Pace(expected))
 		delay = cadence
