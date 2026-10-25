@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cpanato/tado-bridge/internal/domain"
+	"github.com/cpanato/tado-bridge/internal/history"
 )
 
 type stackClient struct {
@@ -259,7 +260,151 @@ func checkStack(ctx context.Context, values map[string]string) error {
 	if privileges.Error != "" || len(privileges.Frames) != 1 || !reflect.DeepEqual(privileges.Frames[0].Data.Values, [][]any{{"grafana_reader"}, {true}, {false}}) {
 		return errors.New("unexpected Grafana role privileges")
 	}
+	if err := c.checkSummaries(bridge, grafana, bearer, auth, snapshot.CollectedAt); err != nil {
+		return err
+	}
+	return c.checkAlerts(grafana, prometheus, auth)
+}
+
+func (c stackClient) checkSummaries(bridge, grafana, bearer, auth string, at time.Time) error {
+	query := url.Values{"from": {at.Add(-24 * time.Hour).Format(time.RFC3339Nano)}, "to": {at.Add(time.Second).Format(time.RFC3339Nano)}, "timezone": {"UTC"}, "home_id": {"synthetic-home"}, "zone_id": {"synthetic-room-1"}}
+	endpoint := bridge + "/api/v1/history/summary?" + query.Encode()
+	if status, err := c.request(endpoint, "", nil, nil, true); err != nil || status != http.StatusUnauthorized {
+		return errors.New("unauthenticated summaries were accepted")
+	}
+	var summary history.Summary
+	if _, err := c.request(endpoint, bearer, nil, &summary, false); err != nil {
+		return err
+	}
+	var samples int64
+	for _, day := range summary.Days {
+		if day.HomeID != "synthetic-home" || day.ZoneID != "synthetic-room-1" {
+			return errors.New("summary selected the wrong room")
+		}
+		samples += day.TemperatureC.Samples
+	}
+	if samples != 97 {
+		return fmt.Errorf("expected 97 summary samples, got %d", samples)
+	}
+	var dashboard struct {
+		Dashboard struct {
+			Panels []struct {
+				Targets []map[string]any `json:"targets"`
+			} `json:"panels"`
+		} `json:"dashboard"`
+	}
+	if _, err := c.request(grafana+"/api/dashboards/uid/tado-bridge-summary", auth, nil, &dashboard, false); err != nil {
+		return err
+	}
+	count := 0
+	for _, panel := range dashboard.Dashboard.Panels {
+		for _, target := range panel.Targets {
+			sql, ok := target["rawSql"].(string)
+			if !ok {
+				return errors.New("summary query missing")
+			}
+			target["rawSql"] = strings.NewReplacer("${summary_timezone:sqlstring}", "'UTC'", "${summary_max_gap:sqlstring}", "'7200'", "${summary_home:sqlstring}", "'synthetic-home'", "${summary_room:sqlstring}", "'synthetic-room-1'").Replace(sql)
+			result, err := c.grafana(grafana, auth, target, false)
+			if err != nil {
+				return err
+			}
+			if result.Error != "" || len(result.Frames) == 0 || len(result.Frames[0].Data.Values) == 0 || len(result.Frames[0].Data.Values[0]) == 0 {
+				return errors.New("summary panel returned no data")
+			}
+			count++
+		}
+	}
+	if count != 4 {
+		return errors.New("expected four summary panel queries")
+	}
 	return nil
+}
+
+func (c stackClient) checkAlerts(grafana, prometheus, auth string) error {
+	var rules []struct {
+		UID                  string `json:"uid"`
+		For                  string `json:"for"`
+		NotificationSettings struct {
+			MuteIntervals []string `json:"mute_time_intervals"`
+			Repeat        string   `json:"repeat_interval"`
+		} `json:"notification_settings"`
+		Data []struct {
+			RefID string `json:"refId"`
+			Model struct {
+				Expr string `json:"expr"`
+			} `json:"model"`
+		} `json:"data"`
+	}
+	if _, err := c.request(grafana+"/api/v1/provisioning/alert-rules", auth, nil, &rules, false); err != nil {
+		return err
+	}
+	if len(rules) != 3 {
+		return errors.New("expected three native Grafana alert rules")
+	}
+	seen := map[string]bool{}
+	for _, rule := range rules {
+		seen[rule.UID] = true
+		if len(rule.NotificationSettings.MuteIntervals) != 1 || rule.NotificationSettings.MuteIntervals[0] != "tado-bridge-ui-only" {
+			return errors.New("synthetic alert notifications are not muted")
+		}
+		if duration, err := time.ParseDuration(rule.NotificationSettings.Repeat); err != nil || duration != 4*time.Hour {
+			return errors.New("unexpected alert repeat interval")
+		}
+		if duration, err := time.ParseDuration(rule.For); err != nil || duration <= 0 {
+			return errors.New("alert minimum duration missing")
+		}
+		for _, query := range rule.Data {
+			if query.RefID == "A" {
+				series, err := c.prometheus(prometheus, query.Model.Expr)
+				if err != nil {
+					return err
+				}
+				if len(series) == 0 {
+					return errors.New("alert expression returned no series")
+				}
+				for _, item := range series {
+					if item.Metric["room"] == "All rooms (mean)" {
+						return errors.New("room alert targets the aggregate")
+					}
+				}
+			}
+		}
+	}
+	for _, uid := range alertUIDs {
+		if !seen[uid] {
+			return errors.New("native alert rule missing")
+		}
+	}
+	// Check the actual Grafana evaluator, not just the imported JSON or PromQL.
+	return waitFor(c.ctx, "healthy native Grafana alert evaluations", func() bool {
+		var response struct {
+			Data struct {
+				Groups []struct {
+					Rules []struct {
+						Name           string    `json:"name"`
+						Health         string    `json:"health"`
+						LastError      string    `json:"lastError"`
+						LastEvaluation time.Time `json:"lastEvaluation"`
+					} `json:"rules"`
+				} `json:"groups"`
+			} `json:"data"`
+		}
+		if _, err := c.request(grafana+"/api/prometheus/grafana/api/v1/rules", auth, nil, &response, false); err != nil {
+			return false
+		}
+		count := 0
+		for _, group := range response.Data.Groups {
+			for _, rule := range group.Rules {
+				if strings.HasPrefix(rule.Name, "tado-bridge") {
+					if rule.Health != "ok" || rule.LastError != "" || rule.LastEvaluation.IsZero() {
+						return false
+					}
+					count++
+				}
+			}
+		}
+		return count == 3
+	})
 }
 
 func checkGauge(series []promSeries, expected *float64) error {

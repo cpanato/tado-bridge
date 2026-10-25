@@ -16,6 +16,8 @@ Room discovery requires `METRICS_ROOM_DETAILS=true` alongside `METRICS_ENABLED=t
 
 Combine `compose.yaml`, `compose.history.yaml` and `compose.observability.yaml` to run the bridge, PostgreSQL, Prometheus and Grafana locally. The default Compose setup remains independent of these services. The overlay enables metrics, provisions both data sources and the dashboard, and creates a dedicated read-only PostgreSQL login for Grafana. Grafana and Prometheus publish only on host loopback; PostgreSQL has no host port.
 
+When upgrading an existing stack, rerun `make observability-prepare` with the same private state directory before starting Compose. This maps both dashboard templates and creates the alert-provisioning directory while preserving database and dashboard state.
+
 Stop other instances sharing your OAuth credentials. Keep your existing `TADO_CREDENTIALS_DIR`, `API_TOKEN` and database password. For a new local setup:
 
 ```sh
@@ -103,3 +105,43 @@ Scrape availability describes Prometheus access, not upstream health. History er
 Automated checks validate datasource mappings, exported metric references and all historical queries against real PostgreSQL with synthetic null/zero readings. The local provisioned dashboard is also exercised against real Grafana/Prometheus in the optional Compose smoke test. The checked-in screenshot was captured from that stack; validate your own imported data-source mapping separately. The bridge has no Grafana runtime dependency.
 
 Official references: [dashboard import](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/import-dashboards/) and [PostgreSQL time-series queries](https://grafana.com/docs/grafana/latest/datasources/postgres/query-editor/).
+
+## Daily summary dashboard
+
+Import [tado-bridge-summary.json](tado-bridge-summary.json) and select the PostgreSQL data source. The local Compose helper provisions it automatically, and the current-climate dashboard links to it. Restart the updated bridge first so it installs `tado_bridge_daily_summary` in its history schema.
+
+The dashboard discovers homes and rooms from stored history in the selected time range. Select a home to populate its room selector; **All homes / All rooms** compares everything. These selectors are independent of Prometheus labels. **Day timezone** accepts an IANA zone such as `Europe/Berlin` (default `UTC`). **Max gap (seconds)** defaults to `7200` and accepts `60`–`86400`. Choose at most 31 days in the time picker.
+
+Tables show daily temperature minima/means/maxima, change from the preceding day, sample counts and estimated below-target/heating durations alongside their known coverage. Unknown below-target intervals display a dash. Charts show daily temperature and humidity sample means as discrete points. Partial days remain partial; means are not weighted by elapsed time, and a daily difference can compare different amounts of coverage. See [summary semantics](../../docs/history.md#daily-summaries).
+
+![Daily summary dashboard with synthetic data](../../docs/images/grafana/summary.png)
+
+## Native Grafana alerts
+
+Alerts are disabled by default. For the local Compose stack, export the settings below **before** `make observability-prepare`, then restart Grafana so it reloads the generated provisioning file. Use the same `OBSERVABILITY_DIR`, API token and database/admin passwords as the existing setup.
+
+```sh
+export GRAFANA_ALERTS_ENABLED=true
+export GRAFANA_ALERTS_LOW_TEMPERATURE_C=18
+export GRAFANA_ALERTS_HIGH_HUMIDITY_PERCENT=70
+export GRAFANA_ALERTS_FOR=90m
+export GRAFANA_ALERTS_STALE_FOR=5m
+export GRAFANA_ALERTS_REPEAT_INTERVAL=4h
+# Reuse your service's actual MAX_SNAPSHOT_AGE; default is 2h.
+make observability-prepare
+docker compose restart grafana
+```
+
+Go to **Alerting → Alert rules → tado-bridge**. Three Grafana-managed rules evaluate every minute:
+
+| Rule | Default condition | Pending duration |
+|---|---|---|
+| Low temperature | Each known room below 18°C while the collection is fresh | 90 minutes |
+| High humidity | Each known room above 70% while the collection is fresh | 90 minutes |
+| Stale or missing collection | Collection older than `MAX_SNAPSHOT_AGE`; missing metrics also surface an alert | 5 minutes for an exceeded age |
+
+Temperature/humidity require the existing room-metrics opt-in, which the observability overlay enables. The aggregate **All rooms (mean)** is excluded, and absent readings are not converted into zero. A rule returning no temperature/humidity series shows Grafana's **No Data** state; individual missing rooms follow Grafana's missing-series handling, and query failures show **Error**. Grafana's native No Data alert for a missing collection can appear before the normal pending duration. Rules evaluate the cached readings, so their pending duration does not prove multiple new sensor measurements. Match it and `MAX_SNAPSHOT_AGE` to the collector's effective request-budget cadence.
+
+Alerts are visible **only in Grafana**. The template references the empty receiver supplied by a fresh Grafana installation and applies a per-rule all-day mute. It creates no contact points and leaves the global notification policy tree untouched. The repeat interval is configurable (a multiple of five minutes, from five minutes to seven days), but has no outbound effect while muted. External notification channels remain an explicit future choice.
+
+Provisioned rules are edited through the environment/template and reprovisioned; Grafana's UI treats file-provisioned settings as read-only. To disable these rules, set `GRAFANA_ALERTS_ENABLED=false`, prepare again and restart Grafana; only the three owned rule UIDs are deleted. [alerts.json](alerts.json) is the canonical importable template. For an existing external Grafana, map its Prometheus UID and an existing receiver, retaining the all-day mute; do not replace its notification policy tree. The default queries select `job="tado-bridge"`; adjust that label if your scrape job differs. Native provisioning behavior and mute timing are documented by [Grafana](https://grafana.com/docs/grafana/latest/alerting/set-up/provision-alerting-resources/file-provisioning/).

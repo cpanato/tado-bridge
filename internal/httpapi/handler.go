@@ -79,6 +79,9 @@ func New(cache *store.Store, options Options) http.Handler {
 		})
 	}
 	if options.History != nil {
+		if summaries, ok := options.History.(history.Summarizer); ok {
+			mux.HandleFunc("/api/v1/history/summary", summaryHandler(summaries, options.APIToken))
+		}
 		mux.HandleFunc("/api/v1/history", func(w http.ResponseWriter, r *http.Request) {
 			if !get(w, r) || !authenticate(w, r, options.APIToken) {
 				return

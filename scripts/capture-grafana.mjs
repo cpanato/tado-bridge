@@ -10,6 +10,8 @@ if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Screensho
 const [configPath, output] = process.argv.slice(2);
 if (!configPath || !output) throw new Error('Usage: node scripts/capture-grafana.mjs FIXTURE_CONFIG OUTPUT.png');
 const config = JSON.parse(await readFile(configPath, 'utf8'));
+if (config.dashboard && !['tado-bridge', 'tado-bridge-summary'].includes(config.dashboard)) throw new Error('Unknown synthetic dashboard.');
+const summary = config.dashboard === 'tado-bridge-summary';
 if (config.purpose !== 'tado-bridge-synthetic-preview' || !/^http:\/\/127\.0\.0\.1:\d+$/.test(config.url)) {
   throw new Error('Capture requires the isolated synthetic Compose fixture.');
 }
@@ -64,19 +66,25 @@ try {
     return result.result.value;
   }
   await page('Page.enable');
-  await page('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1360, deviceScaleFactor: 1, mobile: false });
+  await page('Emulation.setDeviceMetricsOverride', { width: 1600, height: summary ? 1560 : 1360, deviceScaleFactor: 1, mobile: false });
   await page('Page.navigate', { url: `${config.url}/login` });
   await wait(() => evaluate(`location.origin === ${JSON.stringify(config.url)} && document.readyState === 'complete'`), 'login page');
   const status = await evaluate(`(async () => (await fetch('/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({ user: 'admin', password: config.password })})})).status)()`);
   if (status !== 200) throw new Error('Synthetic Grafana login failed');
   const room = 'Synthetic home / Room 1';
-  await page('Page.navigate', { url: `${config.url}/d/tado-bridge/tado-bridge?from=now-24h&to=now&timezone=utc&var-job=tado-bridge&var-instance=tado-bridge%3A8080&var-room=${encodeURIComponent(room)}&kiosk` });
-  await wait(() => evaluate("document.body.innerText.includes('Measured temperature') && document.body.innerText.includes('Heating activity') && document.body.innerText.includes('Temperature · Synthetic home / Room 1') && !document.body.innerText.includes('Loading...')"), 'selected-room gauges and history');
+  const dashboardURL = summary
+    ? `${config.url}/d/tado-bridge-summary?from=now-24h&to=now&timezone=utc&var-summary_home=&var-summary_room=&var-summary_timezone=UTC&var-summary_max_gap=7200&kiosk`
+    : `${config.url}/d/tado-bridge/tado-bridge?from=now-24h&to=now&timezone=utc&var-job=tado-bridge&var-instance=tado-bridge%3A8080&var-room=${encodeURIComponent(room)}&kiosk`;
+  await page('Page.navigate', { url: dashboardURL });
+  const ready = summary
+    ? "document.body.innerText.includes('Daily temperature') && document.body.innerText.includes('Estimated activity') && document.body.innerText.includes('Synthetic home / Room 1') && !document.body.innerText.includes('Loading...')"
+    : "document.body.innerText.includes('Measured temperature') && document.body.innerText.includes('Heating activity') && document.body.innerText.includes('Temperature · Synthetic home / Room 1') && !document.body.innerText.includes('Loading...')";
+  await wait(() => evaluate(ready), 'synthetic dashboard data');
   await evaluate('document.fonts.ready.then(() => true)');
   // Give canvas plots their first paint after asynchronous data-source queries.
   await delay(6000);
   if (await evaluate("document.body.innerText.includes('No data')")) throw new Error('Selected synthetic room gauges should have data; inspect dashboard queries before capturing.');
-  if (!await evaluate("['19.2','20.5','46.0'].every(value => document.body.innerText.includes(value))")) throw new Error('The visible gauges do not match synthetic Room 1 readings.');
+  if (!summary && !await evaluate("['19.2','20.5','46.0'].every(value => document.body.innerText.includes(value))")) throw new Error('The visible gauges do not match synthetic Room 1 readings.');
   await evaluate("document.title = 'tado-bridge — Synthetic preview'; window.scrollTo(0,0)");
   const result = await page('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
   await mkdir(dirname(output), { recursive: true });
@@ -86,5 +94,6 @@ try {
   if (socket) socket.close();
   chrome.kill('SIGTERM');
   await Promise.race([new Promise(resolve => chrome.once('exit', resolve)), delay(5000)]);
-  await rm(profile, { recursive: true, force: true });
+  // Chrome helper processes can briefly flush files after the parent exits.
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

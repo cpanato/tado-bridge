@@ -59,7 +59,17 @@ func prepare(root, directory, token string) error {
 			return err
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(root, "integrations/grafana/tado-bridge.json"))
+	if err := mapDashboard(root, directory, "tado-bridge.json"); err != nil {
+		return err
+	}
+	if err := mapDashboard(root, directory, "tado-bridge-summary.json"); err != nil {
+		return err
+	}
+	return privateWrite(filepath.Join(directory, "api-token"), []byte(token))
+}
+
+func mapDashboard(root, directory, name string) error {
+	data, err := os.ReadFile(filepath.Join(root, "integrations/grafana", name))
 	if err != nil {
 		return err
 	}
@@ -73,8 +83,5 @@ func prepare(root, directory, token string) error {
 		return err
 	}
 	mapped := strings.NewReplacer("${DS_PROMETHEUS}", "tado-bridge-prometheus", "${DS_POSTGRESQL}", "tado-bridge-postgres").Replace(string(data))
-	if err := privateWrite(filepath.Join(directory, "api-token"), []byte(token)); err != nil {
-		return err
-	}
-	return privateWrite(filepath.Join(directory, "dashboards/tado-bridge.json"), []byte(mapped+"\n"))
+	return privateWrite(filepath.Join(directory, "dashboards", name), []byte(mapped+"\n"))
 }

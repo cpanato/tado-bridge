@@ -104,3 +104,59 @@ func TestGrafanaTemplateUsesExistingMetricsAndReadOnlyQueries(t *testing.T) {
 		t.Fatalf("unexpected panels: prometheus=%d postgres=%d", promPanels, pgPanels)
 	}
 }
+
+func TestDailySummaryDashboardUsesSharedReadOnlySQL(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "integrations", "grafana", "tado-bridge-summary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dashboard struct {
+		UID    string `json:"uid"`
+		Panels []struct {
+			Datasource struct {
+				UID string `json:"uid"`
+			} `json:"datasource"`
+			Targets []struct {
+				SQL string `json:"rawSql"`
+			} `json:"targets"`
+		} `json:"panels"`
+		Templating struct {
+			List []struct {
+				Name  string `json:"name"`
+				Query string `json:"query"`
+			} `json:"list"`
+		} `json:"templating"`
+	}
+	if err := json.Unmarshal(data, &dashboard); err != nil {
+		t.Fatal(err)
+	}
+	if dashboard.UID != "tado-bridge-summary" || len(dashboard.Panels) != 4 {
+		t.Fatal("unexpected daily dashboard")
+	}
+	for _, panel := range dashboard.Panels {
+		for _, target := range panel.Targets {
+			if panel.Datasource.UID != "${DS_POSTGRESQL}" || !strings.HasPrefix(target.SQL, "SELECT ") || !strings.Contains(target.SQL, "tado_bridge_daily_summary($__timeFrom(), $__timeTo()") {
+				t.Fatal("summary must reuse bounded, read-only history aggregation")
+			}
+			for _, variable := range []string{"summary_timezone", "summary_max_gap", "summary_home", "summary_room"} {
+				if !strings.Contains(target.SQL, "${"+variable+":sqlstring}") {
+					t.Fatal("summary variable must be SQL-escaped:", variable)
+				}
+			}
+		}
+	}
+	found := map[string]bool{}
+	for _, variable := range dashboard.Templating.List {
+		found[variable.Name] = true
+		if variable.Name == "summary_home" || variable.Name == "summary_room" {
+			if !strings.HasPrefix(variable.Query, "SELECT ") || !strings.Contains(variable.Query, "$__timeFilter(s.collected_at)") {
+				t.Fatal("room discovery must query bounded history")
+			}
+		}
+	}
+	for _, name := range []string{"summary_home", "summary_room", "summary_timezone", "summary_max_gap"} {
+		if !found[name] {
+			t.Fatal("missing summary selector", name)
+		}
+	}
+}

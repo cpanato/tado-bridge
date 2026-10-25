@@ -165,6 +165,14 @@
           "type": "string",
           "minLength": 1
         },
+        "historySummary": {
+          "type": "boolean"
+        },
+        "summaryTimezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
         "rooms": {
           "type": "array",
           "maxItems": 16,

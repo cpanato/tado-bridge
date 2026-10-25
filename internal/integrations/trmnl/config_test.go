@@ -28,6 +28,8 @@ func TestConfigPrivacyAndOptIn(t *testing.T) {
 		{"short interval", "TRMNL_INTERVAL", "1m", true},
 		{"huge interval", "TRMNL_INTERVAL", "25h", true},
 		{"invalid interval", "TRMNL_INTERVAL", "private", true},
+		{"summary opt in", "TRMNL_HISTORY_SUMMARY", "true", false},
+		{"invalid summary bool", "TRMNL_HISTORY_SUMMARY", "maybe", true},
 		{"display name", "TRMNL_ROOMS", `[{"home_id":"private-home","zone_id":"private-zone","name":"Kitchen"}]`, false},
 	}
 	for _, tt := range tests {
@@ -59,5 +61,24 @@ func TestConfigPrivacyAndOptIn(t *testing.T) {
 	config, err := LoadConfig(func(string) string { return "" })
 	if err != nil || config.Enabled {
 		t.Fatal("not disabled by default")
+	}
+}
+
+func TestSummaryTimezoneRequiresItsOwnOptIn(t *testing.T) {
+	env := map[string]string{"TRMNL_ENABLED": "true", "TRMNL_WEBHOOK_URL": "https://trmnl.com/api/custom_plugins/synthetic", "TRMNL_ROOMS": `[{"home_id":"h","zone_id":"z"}]`, "TRMNL_HISTORY_SUMMARY": "true", "TRMNL_SUMMARY_TIMEZONE": "Europe/Berlin"}
+	read := func(k string) string { return env[k] }
+	config, err := LoadConfig(read)
+	if err != nil || !config.SummaryEnabled || config.SummaryTimezone != "Europe/Berlin" {
+		t.Fatal("summary timezone not configured", err)
+	}
+	for _, zone := range []string{"Local", "Invalid/PrivateZone"} {
+		env["TRMNL_SUMMARY_TIMEZONE"] = zone
+		if _, err := LoadConfig(read); err == nil || strings.Contains(err.Error(), zone) {
+			t.Fatal("invalid timezone accepted or echoed")
+		}
+	}
+	env["TRMNL_HISTORY_SUMMARY"] = "false"
+	if config, err := LoadConfig(read); err != nil || config.SummaryEnabled {
+		t.Fatal("disabled summaries should ignore timezone", err)
 	}
 }

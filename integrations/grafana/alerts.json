@@ -1,0 +1,306 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "folder": "tado-bridge",
+      "interval": "1m",
+      "name": "tado-bridge",
+      "orgId": 1,
+      "rules": [
+        {
+          "annotations": {
+            "__dashboardUid__": "tado-bridge",
+            "description": "Visible in Grafana only. Missing measurements are unknown; collection timestamps do not prove sensor freshness.",
+            "summary": "tado-bridge · Low room temperature",
+            "__panelId__": "2"
+          },
+          "condition": "B",
+          "data": [
+            {
+              "datasourceUid": "tado-bridge-prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "tado-bridge-prometheus"
+                },
+                "expr": "(tado_bridge_current_temperature_celsius{job=\"tado-bridge\",room!=\"All rooms (mean)\"} < bool 18) and on(job,instance) (tado_bridge_snapshot_age_seconds{job=\"tado-bridge\"} <= 7200)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "range": false,
+                "refId": "A"
+              },
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              }
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "threshold"
+              },
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              }
+            }
+          ],
+          "execErrState": "Error",
+          "for": "90m",
+          "isPaused": false,
+          "labels": {
+            "app": "tado-bridge",
+            "severity": "warning"
+          },
+          "noDataState": "NoData",
+          "notification_settings": {
+            "group_by": [
+              "grafana_folder",
+              "alertname",
+              "job",
+              "instance",
+              "room"
+            ],
+            "group_interval": "5m",
+            "group_wait": "30s",
+            "mute_time_intervals": [
+              "tado-bridge-ui-only"
+            ],
+            "receiver": "empty",
+            "repeat_interval": "4h"
+          },
+          "title": "tado-bridge · Low room temperature",
+          "uid": "tado-low-temperature"
+        },
+        {
+          "annotations": {
+            "__dashboardUid__": "tado-bridge",
+            "description": "Visible in Grafana only. Missing measurements are unknown; collection timestamps do not prove sensor freshness.",
+            "summary": "tado-bridge · High room humidity",
+            "__panelId__": "4"
+          },
+          "condition": "B",
+          "data": [
+            {
+              "datasourceUid": "tado-bridge-prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "tado-bridge-prometheus"
+                },
+                "expr": "(tado_bridge_current_humidity_percent{job=\"tado-bridge\",room!=\"All rooms (mean)\"} > bool 70) and on(job,instance) (tado_bridge_snapshot_age_seconds{job=\"tado-bridge\"} <= 7200)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "range": false,
+                "refId": "A"
+              },
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              }
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "threshold"
+              },
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              }
+            }
+          ],
+          "execErrState": "Error",
+          "for": "90m",
+          "isPaused": false,
+          "labels": {
+            "app": "tado-bridge",
+            "severity": "warning"
+          },
+          "noDataState": "NoData",
+          "notification_settings": {
+            "group_by": [
+              "grafana_folder",
+              "alertname",
+              "job",
+              "instance",
+              "room"
+            ],
+            "group_interval": "5m",
+            "group_wait": "30s",
+            "mute_time_intervals": [
+              "tado-bridge-ui-only"
+            ],
+            "receiver": "empty",
+            "repeat_interval": "4h"
+          },
+          "title": "tado-bridge · High room humidity",
+          "uid": "tado-high-humidity"
+        },
+        {
+          "annotations": {
+            "__dashboardUid__": "tado-bridge",
+            "description": "Visible in Grafana only. Missing measurements are unknown; collection timestamps do not prove sensor freshness.",
+            "summary": "tado-bridge · Collection stale or missing",
+            "__panelId__": "7"
+          },
+          "condition": "B",
+          "data": [
+            {
+              "datasourceUid": "tado-bridge-prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "tado-bridge-prometheus"
+                },
+                "expr": "tado_bridge_snapshot_age_seconds{job=\"tado-bridge\"} > bool 7200",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "range": false,
+                "refId": "A"
+              },
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              }
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "threshold"
+              },
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              }
+            }
+          ],
+          "execErrState": "Error",
+          "for": "5m",
+          "isPaused": false,
+          "labels": {
+            "app": "tado-bridge",
+            "severity": "warning"
+          },
+          "noDataState": "Alerting",
+          "notification_settings": {
+            "group_by": [
+              "grafana_folder",
+              "alertname",
+              "job",
+              "instance",
+              "room"
+            ],
+            "group_interval": "5m",
+            "group_wait": "30s",
+            "mute_time_intervals": [
+              "tado-bridge-ui-only"
+            ],
+            "receiver": "empty",
+            "repeat_interval": "4h"
+          },
+          "title": "tado-bridge · Collection stale or missing",
+          "uid": "tado-stale-collection"
+        }
+      ]
+    }
+  ],
+  "muteTimes": [
+    {
+      "name": "tado-bridge-ui-only",
+      "orgId": 1,
+      "time_intervals": [
+        {
+          "location": "UTC",
+          "times": [
+            {
+              "end_time": "24:00",
+              "start_time": "00:00"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

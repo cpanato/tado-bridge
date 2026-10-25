@@ -18,10 +18,12 @@ type Room struct {
 }
 
 type Config struct {
-	Enabled    bool
-	WebhookURL string
-	Interval   time.Duration
-	Rooms      []Room
+	Enabled         bool
+	WebhookURL      string
+	Interval        time.Duration
+	Rooms           []Room
+	SummaryEnabled  bool
+	SummaryTimezone string
 }
 
 // LoadConfig ignores all destination/selection settings while disabled.
@@ -37,6 +39,25 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	}
 	if !c.Enabled {
 		return c, nil
+	}
+	c.SummaryTimezone = "UTC"
+	if value := getenv("TRMNL_HISTORY_SUMMARY"); value != "" {
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return Config{}, errors.New("TRMNL_HISTORY_SUMMARY must be a boolean")
+		}
+		c.SummaryEnabled = enabled
+	}
+	if c.SummaryEnabled {
+		if value := getenv("TRMNL_SUMMARY_TIMEZONE"); value != "" {
+			c.SummaryTimezone = value
+		}
+		if c.SummaryTimezone == "Local" || len(c.SummaryTimezone) > 128 {
+			return Config{}, errors.New("TRMNL_SUMMARY_TIMEZONE must be an IANA timezone")
+		}
+		if _, err := time.LoadLocation(c.SummaryTimezone); err != nil {
+			return Config{}, errors.New("TRMNL_SUMMARY_TIMEZONE must be an IANA timezone")
+		}
 	}
 	c.WebhookURL = getenv("TRMNL_WEBHOOK_URL")
 	u, err := url.Parse(c.WebhookURL)

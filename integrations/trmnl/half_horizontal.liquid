@@ -50,6 +50,12 @@
           <span>Target {% if room.target_temperature_c != nil %}{{ room.target_temperature_c | round: 1 }}°{% else %}—{% endif %}</span>
           <span>Humidity {% if room.humidity_percent != nil %}{{ room.humidity_percent | round }}%{% else %}—{% endif %}</span>
         </div>
+        {% if room.summary %}
+        <span style="font-size:9px;line-height:1.15">
+          {{ room.summary.date | escape }} · {% if room.summary.min_c != nil %}{{ room.summary.min_c | round: 1 }}–{{ room.summary.max_c | round: 1 }}°{% else %}—{% endif %}<br>
+          Mean {% if room.summary.mean_c != nil %}{{ room.summary.mean_c | round: 1 }}°{% else %}—{% endif %}{% if room.summary.mean_change_c != nil %} · Δ {{ room.summary.mean_change_c | round: 1 }}°{% endif %}
+        </span>
+        {% endif %}
         <span class="tb-heat">
           {% if room.heating_active == nil %}
             <span class="tb-dot"></span>Heat unknown
@@ -65,6 +71,6 @@
   {% endif %}
 </div>
 <div class="title_bar tb-half-horizontal-footer">
-  <span class="title">Indoor climate</span>
+  <span class="title">Indoor climate{% if summary_timezone %} · Day {{ summary_timezone | escape }}{% endif %}</span>
   <span class="instance">{% if collected_at %}{{ collected_at | date: '%d %b %H:%M' }} UTC{% if rooms.size > 4 %} · 4/{{ rooms.size }} rooms{% endif %}{% else %}tado-bridge{% endif %}</span>
 </div>

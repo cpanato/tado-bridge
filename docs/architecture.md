@@ -41,10 +41,12 @@ Only GET is accepted. JSON responses use `application/json` and `Cache-Control: 
 
 SIGINT/SIGTERM cancels waits and upstream HTTP requests, stops accepting HTTP traffic and waits for both the collector and server to exit before releasing the credentials lock. HTTP shutdown has a five-second deadline and closes remaining connections if necessary. A force-killed process can leave the existing lock directory; verify it is not running before removing that lock.
 
-The [optional TRMNL publisher](../integrations/trmnl/README.md) receives only the snapshot store. It runs as a separate background task, serializes bounded webhook sends and never obtains a tado client. Remote failures remain inside its retry loop; collection and REST continue normally. It is disabled by default and requires explicit room selection. Service shutdown cancels and joins the publisher along with the collector/server before releasing credentials.
+The [optional TRMNL publisher](../integrations/trmnl/README.md) receives the snapshot store and, when daily summaries are explicitly enabled, a read-only historical-summary interface. It runs as a separate background task, serializes bounded webhook sends and never obtains a tado client. Remote failures remain inside its retry loop; collection and REST continue normally. It is disabled by default and requires explicit room selection. Service shutdown cancels and joins the publisher along with the collector/server before releasing credentials.
 
 [Nonroot container packaging](containers.md) and runtime checks support local and Kubernetes operation. Real TRMNL sending requires an explicit runtime opt-in; releases and deployments require separate authorization. Future adapters consume cached snapshots and never obtain a provider client.
 
 ## Optional persistent history
 
 The in-memory cache remains the current-data source. When `HISTORY_DATABASE_URL` is set, each successful collection also writes a normalized snapshot to PostgreSQL with configurable retention. Runtime database failures are isolated from current-data availability and never retry the provider; failed writes leave gaps. History queries and the Grafana template read the database without owning a tado client. See [history configuration and API](history.md) and [Grafana setup](../integrations/grafana/README.md).
+
+Daily summaries reuse one read-only SQL function across the authenticated summary API, Grafana and optional TRMNL projections. Arithmetic sample statistics and estimated durations are separate: duration coverage stops at the next collection or maximum gap and respects local midnight/DST. Native Grafana alerting consumes existing cached metrics; no alert evaluation or notification loop is added to the collector.

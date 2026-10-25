@@ -32,6 +32,8 @@ trmnl:
   enabled: false
   interval: 30m
   rooms: []
+  historySummary: false
+  summaryTimezone: UTC
 
 # External PostgreSQL only. Connection URL stays in an existing Secret.
 history:

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -30,6 +31,9 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 	if err != nil {
 		return err
 	}
+	if trmnlConfig.SummaryEnabled && config.HistoryDatabaseURL == "" {
+		return errors.New("TRMNL_HISTORY_SUMMARY requires HISTORY_DATABASE_URL")
+	}
 	// Check local credentials before opening a listener; refresh happens in collection.
 	if _, err := credentials.Load(app.credentialsFile); err != nil {
 		return err
@@ -52,6 +56,7 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 		observeHistory = exporter.ObserveHistory
 	}
 	var historical history.Reader
+	var summaries history.Summarizer
 	var saveHistory func(context.Context, domain.Snapshot) error
 	if config.HistoryDatabaseURL != "" {
 		database, err := history.Open(cmd.Context(), config.HistoryDatabaseURL, config.HistoryRetention)
@@ -60,6 +65,7 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 		}
 		defer func() { _ = database.Close() }()
 		historical, saveHistory = database, database.Save
+		summaries = database
 		logger.Info("PostgreSQL history enabled", "retention", config.HistoryRetention)
 	}
 	read := func(ctx context.Context) (domain.Snapshot, int, error) {
@@ -88,7 +94,7 @@ func (app application) serve(cmd *cobra.Command, client *tado.Client) error {
 	logger.Info("HTTP service started", "listen", listener.Addr().String(), "requested_poll_interval", config.PollInterval, "request_budget", config.DailyBudget)
 	handler := httpapi.New(cache, httpapi.Options{MaxSnapshotAge: config.MaxSnapshotAge, APIToken: config.APIToken, MetricsHandler: metricsHandler, History: historical})
 	if trmnlConfig.Enabled {
-		publisher := trmnl.New(trmnlConfig, cache, config.MaxSnapshotAge, logger)
+		publisher := trmnl.New(trmnlConfig, cache, config.MaxSnapshotAge, logger, summaries)
 		return service.Run(cmd.Context(), listener, handler, poller.Run, publisher.Run)
 	}
 	return service.Run(cmd.Context(), listener, handler, poller.Run)

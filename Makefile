@@ -93,4 +93,4 @@ observability-smoke:
 	$(GO) run ./internal/testutil/cmd/observability smoke
 
 observability-screenshot:
-	$(GO) run ./internal/testutil/cmd/observability smoke --screenshot docs/images/grafana/dashboard.png
+	$(GO) run ./internal/testutil/cmd/observability smoke --screenshot docs/images/grafana/dashboard.png --summary-screenshot docs/images/grafana/summary.png

@@ -64,6 +64,9 @@ func initialize(ctx context.Context, db *sql.DB) error {
 	if _, err := tx.ExecContext(ctx, schema); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, summarySchema); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
