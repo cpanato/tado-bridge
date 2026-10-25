@@ -1,0 +1,424 @@
+{
+  "__inputs": [
+    {
+      "label": "PostgreSQL history",
+      "name": "DS_POSTGRESQL",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL",
+      "type": "datasource"
+    }
+  ],
+  "description": "Local calendar-day summaries from PostgreSQL. At most 31 days, max gap 60–86400 seconds. Means use actual samples; estimated durations exclude long gaps and unknown readings. Comparison includes partial days.",
+  "editable": true,
+  "id": null,
+  "links": [
+    {
+      "targetBlank": false,
+      "title": "Current climate",
+      "type": "link",
+      "url": "/d/tado-bridge"
+    },
+    {
+      "title": "Alerts",
+      "type": "link",
+      "url": "/alerting/list",
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "description": "Sample means are not time-weighted. Durations are estimates with bounded holding time; unknown intervals are excluded. Partial days are compared as observed.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "short",
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Day"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Room"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 380
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Samples"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "showHeader": true,
+        "tooltip": {
+          "mode": "multi"
+        },
+        "sortBy": [
+          {
+            "displayName": "Day",
+            "desc": true
+          },
+          {
+            "displayName": "Room",
+            "desc": false
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT value->>'date' AS \"Day\", concat(value->>'home_name', ' / ', value->>'zone_name', ' [', value->>'home_id', '/', value->>'zone_id', ']') AS \"Room\", (value#>>'{temperature_c,min}')::double precision AS \"Min °C\", (value#>>'{temperature_c,mean}')::double precision AS \"Mean °C\", (value#>>'{temperature_c,max}')::double precision AS \"Max °C\", (value->>'temperature_mean_change_c')::double precision AS \"Change vs previous day °C\", (value#>>'{temperature_c,samples}')::bigint AS \"Samples\" FROM tado_bridge_daily_summary($__timeFrom(), $__timeTo(), ${summary_timezone:sqlstring}, (${summary_max_gap:sqlstring})::double precision, ${summary_home:sqlstring}, ${summary_room:sqlstring}) AS s(value)",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily temperature — samples and comparison",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "description": "Sample means are not time-weighted. Durations are estimates with bounded holding time; unknown intervals are excluded. Partial days are compared as observed.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "short",
+          "noValue": "—"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Day"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Room"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 380
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Samples"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 2,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "showHeader": true,
+        "tooltip": {
+          "mode": "multi"
+        },
+        "sortBy": [
+          {
+            "displayName": "Day",
+            "desc": true
+          },
+          {
+            "displayName": "Room",
+            "desc": false
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT value->>'date' AS \"Day\", concat(value->>'home_name', ' / ', value->>'zone_name', ' [', value->>'home_id', '/', value->>'zone_id', ']') AS \"Room\", CASE WHEN (value->>'target_coverage_seconds')::double precision > 0 THEN (value->>'below_target_seconds')::double precision / 3600 END AS \"Below target h\", (value->>'target_coverage_seconds')::double precision / 3600 AS \"Target coverage h\", (value->>'heating_active_seconds')::double precision / 3600 AS \"Heating active h\", (value->>'heating_coverage_seconds')::double precision / 3600 AS \"Heating coverage h\", (value#>>'{target_temperature_c,mean}')::double precision AS \"Mean target °C\" FROM tado_bridge_daily_summary($__timeFrom(), $__timeTo(), ${summary_timezone:sqlstring}, (${summary_max_gap:sqlstring})::double precision, ${summary_home:sqlstring}, ${summary_room:sqlstring}) AS s(value)",
+          "refId": "A"
+        }
+      ],
+      "title": "Estimated activity — coverage matters",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "description": "Sample means are not time-weighted. Durations are estimates with bounded holding time; unknown intervals are excluded. Partial days are compared as observed.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "celsius",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 3,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "showHeader": true,
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT greatest((value->>'day_start')::timestamptz, $__timeFrom()) AS time, concat(value->>'home_name', ' / ', value->>'zone_name', ' [', value->>'home_id', '/', value->>'zone_id', ']') AS metric, (value#>>'{temperature_c,mean}')::double precision AS value FROM tado_bridge_daily_summary($__timeFrom(), $__timeTo(), ${summary_timezone:sqlstring}, (${summary_max_gap:sqlstring})::double precision, ${summary_home:sqlstring}, ${summary_room:sqlstring}) AS s(value)",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily mean temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_POSTGRESQL}"
+      },
+      "description": "Sample means are not time-weighted. Durations are estimates with bounded holding time; unknown intervals are excluded. Partial days are compared as observed.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "showHeader": true,
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_POSTGRESQL}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT greatest((value->>'day_start')::timestamptz, $__timeFrom()) AS time, concat(value->>'home_name', ' / ', value->>'zone_name', ' [', value->>'home_id', '/', value->>'zone_id', ']') AS metric, (value#>>'{humidity_percent,mean}')::double precision AS value FROM tado_bridge_daily_summary($__timeFrom(), $__timeTo(), ${summary_timezone:sqlstring}, (${summary_max_gap:sqlstring})::double precision, ${summary_home:sqlstring}, ${summary_room:sqlstring}) AS s(value)",
+          "refId": "A"
+        }
+      ],
+      "title": "Daily mean humidity",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "tags": [
+    "tado-bridge",
+    "climate",
+    "history"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "All homes",
+          "value": ""
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_POSTGRESQL}"
+        },
+        "includeAll": false,
+        "label": "Home",
+        "multi": false,
+        "name": "summary_home",
+        "query": "SELECT 'All homes' AS __text, '' AS __value UNION ALL SELECT DISTINCT concat(h->>'name', ' [', h->>'id', ']'), h->>'id' FROM tado_bridge_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.payload->'homes') h WHERE $__timeFilter(s.collected_at)",
+        "refresh": 2,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All rooms",
+          "value": ""
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_POSTGRESQL}"
+        },
+        "description": "Select a home first to discover its rooms.",
+        "includeAll": false,
+        "label": "Room",
+        "multi": false,
+        "name": "summary_room",
+        "query": "SELECT 'All rooms' AS __text, '' AS __value UNION ALL SELECT DISTINCT concat(z->>'name', ' [', z->>'id', ']'), z->>'id' FROM tado_bridge_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.payload->'homes') h CROSS JOIN LATERAL jsonb_array_elements(h->'zones') z WHERE $__timeFilter(s.collected_at) AND h->>'id' = ${summary_home:sqlstring} AND ${summary_home:sqlstring} <> ''",
+        "refresh": 2,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "UTC",
+          "value": "UTC"
+        },
+        "label": "Day timezone",
+        "name": "summary_timezone",
+        "query": "UTC",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "7200",
+          "value": "7200"
+        },
+        "label": "Max gap (seconds)",
+        "name": "summary_max_gap",
+        "query": "7200",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "tado-bridge — Daily summaries",
+  "uid": "tado-bridge-summary",
+  "version": 1
+}

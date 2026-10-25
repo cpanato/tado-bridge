@@ -73,3 +73,30 @@ Unit tests cover disabled defaults, URL redaction, authentication, query bounds,
 To run them locally, set `TEST_HISTORY_DATABASE_URL` to a **disposable test database**, then run `go test -race -count=1 ./...`. Tests create and drop uniquely named schemas. They skip PostgreSQL integration checks when the variable is absent; they never use `HISTORY_DATABASE_URL` or real tado credentials.
 
 Import the [Grafana dashboard template](../integrations/grafana/README.md) to combine room history with the current Prometheus aggregates.
+
+## Daily summaries
+
+With history enabled, `GET /api/v1/history/summary` uses the same bearer authentication as the history API. It requires RFC3339 `from` and `to` covering at most 31 days. Optional parameters are `timezone` (IANA name, default `UTC`), `max_gap` (Go duration between `1m` and `24h`, default `2h`), `home_id`, and `zone_id`. Selecting a zone also requires its home. Unknown/repeated parameters are rejected. For example:
+
+```sh
+curl --fail --get http://127.0.0.1:8080/api/v1/history/summary \
+  --header "Authorization: Bearer $API_TOKEN" \
+  --data-urlencode 'from=2026-10-20T00:00:00Z' \
+  --data-urlencode 'to=2026-10-22T00:00:00Z' \
+  --data-urlencode 'timezone=Europe/Berlin' \
+  --data-urlencode 'max_gap=2h'
+```
+
+The result contains the requested window, timezone, `max_gap_seconds`, and a `days` array ordered by local date and home/zone ID. Each entry includes:
+
+- `date`, `day_start`, home/zone IDs and names.
+- `temperature_c`, `target_temperature_c`, and `humidity_percent`, each with `min`, `max`, `mean`, and `samples`. Statistics use actual recorded samples; means are arithmetic, not time-weighted. Missing fields have zero samples and null statistics; valid zero readings remain zero.
+- `temperature_mean_change_c`: that day's sample mean minus the previous calendar day's mean for the same room. It is null when a consecutive day or its temperature mean is unavailable. The comparison uses the observed portions of both days; partial days can have different sample counts and coverage.
+- `below_target_seconds` and `target_coverage_seconds`: estimated time below an active target and the interval for which both measured and target temperatures were known.
+- `heating_active_seconds` and `heating_coverage_seconds`: estimated time with reported heating activity and the interval for which that state was known. This is not boiler runtime or energy consumption.
+
+A reading is held until the next successful collection, the maximum gap, the query end or the current time, whichever comes first. Durations are clipped to the requested window and split at local midnight, including 23/25-hour DST days. A room disappearing from the next snapshot ends its coverage. Gaps and unknown fields do not contribute; a zero duration with zero corresponding coverage means **unknown**, not evidence of no activity. Sensor timestamps still do not establish continuous sensor freshness.
+
+No future interval is extrapolated. API reads exclude expired samples, including when considering a carried reading. Results are bounded to 4,096 room/day entries and 8 MiB, with a five-second database deadline; narrow the window or select a room when necessary. An empty result is `days: []`. The endpoint is absent without history; database failures return a sanitized 503 and leave current cache access available.
+
+Initialization installs the shared, read-only `tado_bridge_daily_summary` SQL function transactionally alongside the table. The API, optional TRMNL summaries and [daily Grafana dashboard](../integrations/grafana/tado-bridge-summary.json) use this same aggregation. Grafana queries the function with its read-only login; it needs `SELECT` on snapshots and `EXECUTE` on the function (the PostgreSQL default grants public function execution). If those defaults were revoked, grant this function's execution explicitly. Direct SQL follows physical retention cleanup, as described above. Existing installations gain the function when the bridge restarts; no snapshots are rewritten.

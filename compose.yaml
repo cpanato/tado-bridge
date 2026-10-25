@@ -33,6 +33,8 @@ services:
       TRMNL_WEBHOOK_URL: "${TRMNL_WEBHOOK_URL:-}"
       TRMNL_INTERVAL: "${TRMNL_INTERVAL:-30m}"
       TRMNL_ROOMS: "${TRMNL_ROOMS:-}"
+      TRMNL_HISTORY_SUMMARY: "${TRMNL_HISTORY_SUMMARY:-false}"
+      TRMNL_SUMMARY_TIMEZONE: "${TRMNL_SUMMARY_TIMEZONE:-UTC}"
     volumes:
       - type: bind
         source: "${TADO_CREDENTIALS_DIR:?Set TADO_CREDENTIALS_DIR to the existing private credentials directory}"

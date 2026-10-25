@@ -214,3 +214,15 @@ func TestChartCustomCAKeepsPrivateKeysOutOfApplication(t *testing.T) {
 		}
 	}
 }
+
+func TestChartTRMNLSummaryRequiresHistoryAndMapsTimezone(t *testing.T) {
+	docs := render(t, "--set", "trmnl.enabled=true", "--set", "history.enabled=true", "--set", "trmnl.historySummary=true", "--set", "trmnl.summaryTimezone=Europe/Berlin", "--set", "service.enabled=false", "--set-json", `trmnl.rooms=[{"home_id":"h","zone_id":"z"}]`)
+	pod := object(t, docs[0], "spec", "template", "spec")
+	env := environment(pod["containers"].([]any)[0].(map[string]any))
+	if env["TRMNL_HISTORY_SUMMARY"]["value"] != "true" || env["TRMNL_SUMMARY_TIMEZONE"]["value"] != "Europe/Berlin" || env["HISTORY_DATABASE_URL"] == nil {
+		t.Fatal("summary settings did not reach the collector")
+	}
+	if err := exec.Command("helm", "template", "test", filepath.Join("..", "..", "charts", "tado-bridge"), "--set", "trmnl.historySummary=true").Run(); err == nil {
+		t.Fatal("summary enabled without its required consumers")
+	}
+}

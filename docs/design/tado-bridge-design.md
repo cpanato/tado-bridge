@@ -1,6 +1,6 @@
 # tado-bridge — Technical design
 
-Status: implemented architecture and current scope. Version: 0.10. Updated: 2026-10-21.
+Status: implemented architecture and current scope. Version: 0.11. Updated: 2026-10-25.
 
 This document describes the code that exists today and the boundaries for future changes. Setup instructions are in the [README](../../README.md); operational details are in [service architecture](../architecture.md), [authentication](../authentication.md), [containers](../containers.md) and [releases](../releases.md).
 
@@ -92,6 +92,7 @@ Budget state resets with the process and excludes other clients. Restarting does
 | `/readyz` | 200 only when climate values exist and collection age is within `MAX_SNAPSHOT_AGE` |
 | `/metrics` | Optional cached Prometheus aggregates and request/collection/history-write counters |
 | `/api/v1/history` | Optional PostgreSQL history; authenticated bounded time windows and cursor pagination |
+| `/api/v1/history/summary` | Optional local-day room statistics, day comparison and bounded estimates of below-target/heating duration |
 
 The listener defaults to loopback. A non-loopback bind requires `ALLOW_NETWORK_EXPOSURE=true` and an API token. When configured, bearer authentication protects snapshots, history and metrics; health/readiness expose generic status without authentication. HTTP headers and connection lifetimes are bounded; upstream response reads have size limits.
 
@@ -105,6 +106,10 @@ Database initialization failures stop startup. Runtime operations have five-seco
 
 The optional Grafana JSON template reads current aggregate or selected-room gauges from Prometheus and historical room series from a read-only PostgreSQL data source. It introduces no Grafana runtime dependency; per-room labels require a separate explicit opt-in. An optional local Compose overlay provisions Prometheus, Grafana and read-only database access, with loopback-only UI ports. See [history](../history.md) and the [dashboard template](../../integrations/grafana/README.md).
 
+The shared, read-only `tado_bridge_daily_summary` SQL function powers the summary API, a separate Grafana dashboard and optional TRMNL summaries. It computes actual-sample statistics per local calendar day and estimates durations only until the next collection or a configurable gap limit. Unknown intervals do not contribute to coverage. Consecutive-day mean comparisons can include partial days; DST days retain their actual length. API windows, row counts, bytes and execution time are bounded. No consumer can request upstream data.
+
+Optional native Grafana rules evaluate low room temperatures, high humidity and stale collections. Room thresholds apply only to fresh cached collections and omit the aggregate. The rules use pending durations and repeat intervals provided by Grafana; the bridge has no independent alert engine or alert database. The supplied configuration uses Grafana's empty receiver and an all-day per-rule mute, keeping alerts in the UI without changing the global notification policy or enabling outbound notifications.
+
 ## TRMNL adapter
 
 TRMNL publishing is disabled by default and requires a private-plugin webhook plus explicit room selection through environment variables. Configured aliases are sent instead of home/room IDs. The destination must be an official HTTPS private-plugin endpoint; webhook secrets are excluded from logs and errors.
@@ -114,6 +119,8 @@ The publisher reads the cache in its own background task. It sends a successful 
 Webhook calls have bounded timeouts and retries, respect `Retry-After`, disable redirects/proxy environment variables and do not stop collection or the JSON API on failure. Payloads are limited to the base webhook size allowance. The four Liquid layouts handle unavailable/zero values, room limits and stale warnings.
 
 Setup, payloads and device checks are documented in [integrations/trmnl](../../integrations/trmnl/README.md). The integration sends selected climate data to TRMNL cloud only after explicit opt-in.
+
+`TRMNL_HISTORY_SUMMARY=true` is an additional opt-in that requires PostgreSQL history. It projects only selected rooms' daily minimum/maximum/mean temperature and previous-day mean change, using aliases rather than IDs. Summaries are anchored to the published snapshot and its configured day timezone. History failures or oversized summary payloads fall back to current readings; queries and sends remain deduplicated for unchanged successful publications.
 
 ## Runtime and packaging
 

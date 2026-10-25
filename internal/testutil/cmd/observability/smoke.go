@@ -105,7 +105,7 @@ func writeJSON(path string, value any) error {
 	return privateWrite(path, data)
 }
 
-func smoke(root string, keep bool, screenshot string) (result error) {
+func smoke(root string, keep bool, screenshot, summaryScreenshot string) (result error) {
 	if os.Getuid() == 0 {
 		return errors.New("run as a nonroot host user")
 	}
@@ -121,7 +121,8 @@ func smoke(root string, keep bool, screenshot string) (result error) {
 		"TADO_CREDENTIALS_DIR": filepath.Join(directory, "credentials"), "TADO_BRIDGE_IMAGE": "ko.local:fixture",
 		"OBSERVABILITY_DIR": filepath.Join(directory, "state"), "HISTORY_DATABASE_URL": "", "HISTORY_RETENTION": "2160h",
 		"METRICS_ENABLED": "true", "METRICS_ROOM_DETAILS": "true", "TRMNL_ENABLED": "false", "TRMNL_WEBHOOK_URL": "", "TRMNL_ROOMS": "",
-		"POLL_INTERVAL": "30m", "MAX_SNAPSHOT_AGE": "2h", "TADO_DAILY_REQUEST_BUDGET": "90",
+		"GRAFANA_ALERTS_ENABLED": "true",
+		"POLL_INTERVAL":          "30m", "MAX_SNAPSHOT_AGE": "2h", "TADO_DAILY_REQUEST_BUDGET": "90",
 	}
 	retained := false
 	configured := false
@@ -171,6 +172,9 @@ func smoke(root string, keep bool, screenshot string) (result error) {
 	if err := prepare(root, values["OBSERVABILITY_DIR"], values["API_TOKEN"]); err != nil {
 		return err
 	}
+	if err := prepareAlerts(root, values["OBSERVABILITY_DIR"], func(key string) string { return values[key] }); err != nil {
+		return err
+	}
 	if _, err := compose("config", "--quiet"); err != nil {
 		return err
 	}
@@ -198,24 +202,27 @@ func smoke(root string, keep bool, screenshot string) (result error) {
 	if _, err := compose("exec", "-T", "postgres", "sh", "/docker-entrypoint-initdb.d/20-grafana-reader.sh"); err != nil {
 		return err
 	}
-	if screenshot != "" {
+	for _, capture := range []struct{ path, dashboard string }{{screenshot, "tado-bridge"}, {summaryScreenshot, "tado-bridge-summary"}} {
+		if capture.path == "" {
+			continue
+		}
 		config := filepath.Join(directory, "capture.json")
-		if err := writeJSON(config, map[string]string{"purpose": purpose, "url": grafana, "password": values["GRAFANA_ADMIN_PASSWORD"]}); err != nil {
+		if err := writeJSON(config, map[string]string{"purpose": purpose, "url": grafana, "password": values["GRAFANA_ADMIN_PASSWORD"], "dashboard": capture.dashboard}); err != nil {
 			return err
 		}
 		node := os.Getenv("NODE")
 		if node == "" {
 			node = "node"
 		}
-		screenshot, err = filepath.Abs(screenshot)
+		output, err := filepath.Abs(capture.path)
 		if err != nil {
 			return err
 		}
-		if _, err := executeContext(ctx, root, nil, []string{node, filepath.Join(root, "scripts/capture-grafana.mjs"), config, screenshot}, false); err != nil {
+		if _, err := executeContext(ctx, root, nil, []string{node, filepath.Join(root, "scripts/capture-grafana.mjs"), config, output}, false); err != nil {
 			return err
 		}
 	}
-	fmt.Println("Optional Compose: 11 Grafana queries, eight discovered rooms, nullable room gauges, authenticated scrapes and read-only history passed.")
+	fmt.Println("Optional Compose: 15 Grafana queries, daily summaries, three native alert rules, eight discovered rooms, nullable gauges, authenticated scrapes and read-only history passed.")
 	if keep {
 		stateFile := filepath.Join(directory, "preview-state.json")
 		state := previewState{purpose, project, values, grafana + "/d/tado-bridge", "admin", values["GRAFANA_ADMIN_PASSWORD"]}

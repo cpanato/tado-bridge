@@ -75,3 +75,20 @@ Checked against official sources on 2026-10-19; this adapter adds no Go dependen
 The four templates were also rendered locally using official LiquidJS 10.30.0 (registry integrity verified), checking escaped aliases, null/zero values, room limits, empty cache and fresh/stale states. This validates Liquid output, not TRMNL pixel rendering.
 
 Tests use a local HTTPS server and fake scheduling for payload contracts, privacy, disabled/empty cache behavior, deduplication, stale transition, retry deadlines, redirects, timeout and cancellation. Real plugin/device acceptance is a manual step; automated tests do not send to TRMNL.
+
+## Optional daily summaries
+
+With history and TRMNL publishing already enabled, additionally set:
+
+```sh
+export TRMNL_HISTORY_SUMMARY=true
+export TRMNL_SUMMARY_TIMEZONE=Europe/Berlin # UTC by default
+```
+
+This is a separate opt-in to send historical temperature information to TRMNL cloud. Only rooms in `TRMNL_ROOMS` are included, with their configured aliases and no home/zone IDs. The four layouts show that collection day's minimum, maximum and mean temperature, plus the mean change from the preceding calendar day when available. The footer identifies the summary timezone. Comparisons can include partial days and use actual sample means, not time-weighted means. See [history calculation details](../../docs/history.md#daily-summaries).
+
+Each room gains an optional `summary` containing `date`, `min_c`, `max_c`, `mean_c` and nullable `mean_change_c`; `summary_timezone` is set on the payload. The historical window is anchored to the published collection and does not change to a new day during stale resends. Readings use one decimal place. Missing summaries, database errors or a payload that would exceed the existing size limit leave the normal current-reading payload available. No historical query triggers tado collection. Fetches use the same deduplication as publishing, rather than querying PostgreSQL again for an unchanged successful publication.
+
+Update all four **Edit Markup** tabs, or generate a fresh import ZIP, to display these fields. With the feature disabled the layouts keep their existing behavior. In Helm, set `trmnl.historySummary: true` and `trmnl.summaryTimezone: Europe/Berlin`; both `trmnl.enabled` and `history.enabled` are required.
+
+![TRMNL full layout with optional daily summaries and synthetic data](../../docs/images/trmnl/full-summary.png)

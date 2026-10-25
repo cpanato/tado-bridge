@@ -10,24 +10,26 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cpanato/tado-bridge/internal/history"
 	"github.com/cpanato/tado-bridge/internal/store"
 )
 
 type Publisher struct {
-	config Config
-	cache  *store.Store
-	maxAge time.Duration
-	client *http.Client
-	logger *slog.Logger
-	now    func() time.Time
-	wait   func(context.Context, time.Duration) error
-	jitter func(time.Duration) time.Duration
+	config    Config
+	cache     *store.Store
+	maxAge    time.Duration
+	client    *http.Client
+	logger    *slog.Logger
+	summaries history.Summarizer
+	now       func() time.Time
+	wait      func(context.Context, time.Duration) error
+	jitter    func(time.Duration) time.Duration
 }
 
-func New(config Config, cache *store.Store, maxAge time.Duration, logger *slog.Logger) *Publisher {
+func New(config Config, cache *store.Store, maxAge time.Duration, logger *slog.Logger, summaries history.Summarizer) *Publisher {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
-	return &Publisher{config: config, cache: cache, maxAge: maxAge, logger: logger, now: time.Now, wait: wait,
+	return &Publisher{config: config, cache: cache, maxAge: maxAge, logger: logger, summaries: summaries, now: time.Now, wait: wait,
 		jitter: func(d time.Duration) time.Duration { return time.Duration(rand.Int64N(int64(d/4) + 1)) },
 		client: &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
@@ -52,7 +54,14 @@ func (p *Publisher) Run(ctx context.Context) error {
 		if !ok {
 			delay = 5 * time.Second
 		} else {
-			data, stale, err := payload(view, p.config.Rooms, p.now(), p.maxAge)
+			stale := p.now().Sub(view.CollectedAt) > p.maxAge
+			if view.CollectedAt.Equal(last) && stale == lastStale {
+				if err := p.wait(ctx, delay); err != nil {
+					return err
+				}
+				continue
+			}
+			data, stale, err := p.payload(ctx, view)
 			if err != nil {
 				p.log("TRMNL payload rejected", 0)
 			} else if !view.CollectedAt.Equal(last) || stale != lastStale {

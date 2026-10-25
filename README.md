@@ -7,7 +7,7 @@ A read-only CLI and local service for tado° V3/V3+ and X. It collects indoor-cl
 - Browser-based OAuth login, automatic token refresh, and home/room discovery, including accounts with mixed V3 and X homes.
 - One-shot or scheduled collection of temperature, target temperature, humidity and heating activity.
 - A local cached API with health/readiness endpoints, request budgeting and bounded retries.
-- Optional PostgreSQL history with retention and a paginated API.
+- Optional PostgreSQL history with retention, a paginated API and daily room summaries.
 - Prometheus metrics, a Grafana dashboard template and selected-room publishing to a TRMNL private plugin.
 - Local Compose operation, a Helm chart, and GoReleaser builds for binaries and container images.
 
@@ -109,15 +109,23 @@ Set `HISTORY_DATABASE_URL` to enable PostgreSQL history. Successful collections 
 
 The [Grafana template](integrations/grafana/README.md) combines current Prometheus gauges with an automatically populated room selector, collection health with PostgreSQL room history. Import its JSON into your own Grafana, or use the [optional local Compose stack](integrations/grafana/README.md#optional-local-compose-stack) to run Grafana and Prometheus with automatic dashboard provisioning.
 
+A second dashboard shows daily temperature minima, means and maxima, changes from the previous day, humidity and estimated time below target or heating active. Select a home, room, day timezone and maximum gap. The same summaries are available at `/api/v1/history/summary`; [calculation details](docs/history.md#daily-summaries) explain coverage and partial days.
+
+Optional [Grafana alert rules](integrations/grafana/README.md#native-grafana-alerts) detect low room temperature, high humidity and stale collections. Alerts appear in Grafana with configurable thresholds and pending durations; no external notification channel is configured.
+
 ![Grafana dashboard with current metrics and eight synthetic room histories](docs/images/grafana/dashboard.png)
 
 Actual Grafana capture using synthetic data; no account or private home readings are included.
+
+![Grafana daily summaries with synthetic room data](docs/images/grafana/summary.png)
 
 ## TRMNL
 
 TRMNL publishing is disabled by default. Enabling it sends explicitly selected cached room readings, display aliases and timestamps to TRMNL cloud. Configure your private-plugin webhook, `TRMNL_ENABLED=true` and `TRMNL_ROOMS`; the collector and API continue to work when TRMNL is disabled or unavailable.
 
 See [private-plugin setup and device testing](integrations/trmnl/README.md). `make trmnl-package` creates an import ZIP. For an existing plugin, replace its four **Edit Markup** tabs and save; importing again creates another plugin.
+
+With PostgreSQL enabled, `TRMNL_HISTORY_SUMMARY=true` additionally sends a compact daily temperature summary for the selected rooms. It is disabled by default; [summary setup](integrations/trmnl/README.md#optional-daily-summaries) describes the extra fields and timezone setting.
 
 The previews below use **synthetic data**, including missing readings and a valid zero. Smaller layouts follow the configured room order and show how many rooms are visible. Stale collections display a warning.
 

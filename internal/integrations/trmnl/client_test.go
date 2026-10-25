@@ -19,7 +19,7 @@ func testPublisher(t *testing.T, cache *store.Store, handler http.HandlerFunc) *
 	t.Helper()
 	server := httptest.NewTLSServer(handler)
 	t.Cleanup(server.Close)
-	p := New(Config{Enabled: true, WebhookURL: server.URL + "/secret-uuid", Interval: 30 * time.Minute, Rooms: []Room{{HomeID: "private-home", ZoneID: "private-zone", Name: "Room 1"}}}, cache, 2*time.Hour, nil)
+	p := New(Config{Enabled: true, WebhookURL: server.URL + "/secret-uuid", Interval: 30 * time.Minute, Rooms: []Room{{HomeID: "private-home", ZoneID: "private-zone", Name: "Room 1"}}}, cache, 2*time.Hour, nil, nil)
 	p.client.Transport = server.Client().Transport
 	p.jitter = func(time.Duration) time.Duration { return 0 }
 	return p

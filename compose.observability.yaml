@@ -62,6 +62,7 @@ services:
       - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - ./integrations/grafana/compose/provisioning:/etc/grafana/provisioning:ro
+      - "${OBSERVABILITY_DIR:?Run make observability-prepare first}/alerting:/etc/grafana/provisioning/alerting:ro"
       - "${OBSERVABILITY_DIR:?Run make observability-prepare first}/dashboards:/var/lib/tado-bridge-dashboards:ro"
       - "${OBSERVABILITY_DIR:?Run make observability-prepare first}/grafana:/var/lib/grafana"
     tmpfs: [/tmp]

@@ -35,19 +35,23 @@ func run(args []string) error {
 		if err := prepare(root, args[1], os.Getenv("API_TOKEN")); err != nil {
 			return errors.New("preparation failed: check API_TOKEN and owned, mode-0700 state directories")
 		}
+		if err := prepareAlerts(root, args[1], os.Getenv); err != nil {
+			return err
+		}
 		fmt.Println("Private observability state and dashboard prepared.")
 		return nil
 	case "smoke":
 		flags := flag.NewFlagSet("smoke", flag.ContinueOnError)
 		keep := flags.Bool("keep", false, "retain the validated synthetic preview")
 		screenshot := flags.String("screenshot", "", "capture the synthetic dashboard (Node and Chrome required)")
+		summaryScreenshot := flags.String("summary-screenshot", "", "capture synthetic daily summaries (Node and Chrome required)")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
 		if flags.NArg() != 0 {
 			return errors.New("unexpected smoke arguments")
 		}
-		return smoke(root, *keep, *screenshot)
+		return smoke(root, *keep, *screenshot, *summaryScreenshot)
 	case "stop":
 		if len(args) != 2 {
 			return errors.New("stop requires a retained preview-state.json file")

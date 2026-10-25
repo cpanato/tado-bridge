@@ -4,6 +4,9 @@
 {{- if and .Values.config.metricsRoomDetails (not .Values.config.metricsEnabled) -}}
 {{- fail "config.metricsRoomDetails requires config.metricsEnabled=true" -}}
 {{- end -}}
+{{- if and .Values.trmnl.historySummary (not (and .Values.trmnl.enabled .Values.history.enabled)) -}}
+{{- fail "trmnl.historySummary requires trmnl.enabled=true and history.enabled=true" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -100,6 +103,10 @@ spec:
               value: {{ .Values.trmnl.interval | quote }}
             - name: TRMNL_ROOMS
               value: {{ .Values.trmnl.rooms | toJson | quote }}
+            - name: TRMNL_HISTORY_SUMMARY
+              value: {{ .Values.trmnl.historySummary | quote }}
+            - name: TRMNL_SUMMARY_TIMEZONE
+              value: {{ .Values.trmnl.summaryTimezone | quote }}
             {{- end }}
           startupProbe:
             httpGet:

@@ -36,7 +36,7 @@ func TestLocalServiceCacheAndShutdown(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}
-	publisher := trmnl.New(trmnl.Config{Enabled: true, WebhookURL: "https://127.0.0.1:1/api/custom_plugins/fixture", Interval: 30 * time.Minute, Rooms: []trmnl.Room{{HomeID: "fixture", ZoneID: "fixture", Name: "Room 1"}}}, cache, time.Hour, nil)
+	publisher := trmnl.New(trmnl.Config{Enabled: true, WebhookURL: "https://127.0.0.1:1/api/custom_plugins/fixture", Interval: 30 * time.Minute, Rooms: []trmnl.Room{{HomeID: "fixture", ZoneID: "fixture", Name: "Room 1"}}}, cache, time.Hour, nil, nil)
 	joined := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
